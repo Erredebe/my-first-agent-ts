@@ -69,7 +69,7 @@ function submitForm() {
 }
 
 async function sendMessage(message) {
-  const response = await fetch("/api/chat", {
+  const response = await fetch(`${window.API_URL}/api/chat`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ message, sessionId: state.sessionId })

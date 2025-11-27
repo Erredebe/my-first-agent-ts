@@ -25,6 +25,11 @@ npm install
 - `MODEL` (opcional): modelo a usar. Por defecto `deepseek/deepseek-r1-0528-qwen3-8b`.
 - `SYSTEM_PROMPT` (opcional): prompt del sistema.
 
+### Variables de despliegue
+- `FRONTEND_URL` (backend): URL del frontend para configurar CORS. Por defecto `http://localhost:3000`.
+- `PORT` (backend): Puerto del servidor backend. Por defecto `3000`.
+- `window.API_URL` (frontend): URL del backend. Definir en `public/config.js` antes de cargar `main.js`.
+
 ## Uso
 ```bash
 npm start
@@ -55,3 +60,25 @@ npm run start:web
 ## Notas
 - Cambia modelo/URL/prompt en `src/config/index.ts` o vía variables de entorno.
 - El streaming se muestra en tiempo real en la consola.
+
+## Despliegue separado (Frontend + Backend)
+
+El proyecto está configurado para poder desplegar el frontend y backend por separado:
+
+### Backend
+```bash
+# Servidor API (por defecto en puerto 3000)
+FRONTEND_URL=https://mi-frontend.com npm run start:web
+```
+
+### Frontend
+Servir los archivos de `public/` con cualquier servidor estático. Antes de servir, editar `public/config.js`:
+```javascript
+window.API_URL = "https://mi-backend.com";
+```
+
+**Ejemplo con servidor estático:**
+```bash
+cd public
+npx serve -p 8080
+```

@@ -1,4 +1,5 @@
 import express, { Request, Response } from "express";
+import cors from "cors";
 import path from "path";
 import { randomUUID } from "crypto";
 import { exec } from "child_process";
@@ -13,6 +14,14 @@ import { Logger } from "../core/logger.js";
  * Exportamos `app` para poder testear con supertest sin arrancar el servidor.
  */
 export const app = express();
+
+// CORS configuration
+const FRONTEND_URL = process.env.FRONTEND_URL || "http://localhost:3000";
+app.use(cors({
+  origin: FRONTEND_URL,
+  credentials: true
+}));
+
 app.use(express.json());
 
 const __filename = fileURLToPath(import.meta.url);
