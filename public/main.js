@@ -143,57 +143,73 @@ function removeThinkingBubble() {
  * - Bloques <think> -> <details> colapsables
  * - Enlaces de descarga directos
  */
+/**
+ * Renderiza contenido del asistente permitiendo:
+ * - Markdown completo (usando marked)
+ * - Bloques ```html``` -> HTML interpretado
+ * - Bloques <think> -> <details> colapsables
+ * - Enlaces de descarga directos
+ */
 function renderAssistantContent(container, text) {
-  const codeHtmlBlock = /```(?:html)?\n([\s\S]*?)\n```/g;
-  let html = text.replace(codeHtmlBlock, (_m, inner) => inner);
-
-  const mdLink =
-    /\[([^\]]+)\]\((https?:\/\/[^\s)]+|\/api\/download\/[^\s)]+)\)/g;
-  const downloadPath =
-    /(https?:\/\/[^\s]+\/api\/download\/[a-zA-Z0-9-]+|\/api\/download\/[a-zA-Z0-9-]+)/g;
-
-  html = html
-    .replace(
-      mdLink,
-      (_m, label, url) =>
-        `<a href="${url}" target="_blank" rel="noopener noreferrer" download>${label}</a>`
-    )
-    .replace(
-      downloadPath,
-      (url) =>
-        `<a href="${url}" target="_blank" rel="noopener noreferrer" download>Descargar archivo</a>`
-    );
-
-  // Convertimos bloques <think> en <details> colapsables
-  const thinkRegex = /<think>([\s\S]*?)<\/think>/gi;
-  html = html.replace(thinkRegex, (_m, body) => {
-    const safe = escapeHtml(body.trim());
-    return `<details class="think-block"><summary class="think-summary">Mostrar contenido</summary><div class="think-body">${safe}</div></details>`;
+  // 1. Extraer bloques ```html ... ``` para que no los toque marked
+  const htmlBlocks = [];
+  let processedText = text.replace(/```html\n([\s\S]*?)\n```/g, (match, inner) => {
+    htmlBlocks.push(inner);
+    return `__HTML_BLOCK_${htmlBlocks.length - 1}__`;
   });
 
-  // Si hay un único enlace de descarga, lo renderizamos limpio
-  const downloadUrlMatch = html.match(
-    /(https?:\/\/[\w:\-./]+\/api\/download\/[a-zA-Z0-9-]+|\/api\/download\/[a-zA-Z0-9-]+)/
-  );
-  const downloadAttrMatch = html.match(/download="([^"]+)"/);
-  if (downloadUrlMatch) {
-    const url = downloadUrlMatch[0];
-    const filename = downloadAttrMatch ? downloadAttrMatch[1] : "Descargar archivo";
-    const a = document.createElement("a");
-    a.href = url;
-    a.target = "_blank";
-    a.rel = "noopener noreferrer";
-    a.download = filename;
-    a.textContent = filename;
-    container.innerHTML = "";
-    container.appendChild(a);
-    return;
-  }
+  // 2. Extraer bloques <think> ... </think> para que no los toque marked (o procesarlos antes)
+  //    Preferimos procesarlos antes para que el contenido dentro de think también pueda tener markdown si se quiere,
+  //    pero por simplicidad y para evitar conflictos, los extraemos y luego los restauramos.
+  const thinkBlocks = [];
+  processedText = processedText.replace(/<think>([\s\S]*?)<\/think>/gi, (match, body) => {
+    thinkBlocks.push(body);
+    return `__THINK_BLOCK_${thinkBlocks.length - 1}__`;
+  });
 
-  // Por defecto renderizamos el HTML ya transformado
+  // 3. Renderizar Markdown con marked
+  let html = marked.parse(processedText);
+
+  // 4. Restaurar bloques HTML (interpretados)
+  html = html.replace(/__HTML_BLOCK_(\d+)__/g, (match, index) => {
+    return htmlBlocks[index];
+  });
+
+  // 5. Restaurar bloques <think> (como details)
+  //    Nota: El contenido dentro de think lo escapamos para evitar XSS si fuera user content,
+  //    pero aquí viene del modelo. Aún así, es mejor renderizarlo como texto plano o markdown simple.
+  //    Aquí lo renderizamos como markdown también para que se vea bonito.
+  html = html.replace(/__THINK_BLOCK_(\d+)__/g, (match, index) => {
+    const body = thinkBlocks[index];
+    // Renderizamos el contenido del think también con marked, o lo dejamos raw.
+    // Vamos a dejarlo procesado por marked para que listas, etc. se vean bien dentro del think.
+    const bodyHtml = marked.parse(body);
+    return `<details class="think-block"><summary class="think-summary">Mostrar pensamiento</summary><div class="think-body">${bodyHtml}</div></details>`;
+  });
+
+  // 6. Manejo especial para enlaces de descarga (si marked no los dejó como queremos o para asegurar target blank)
+  //    Marked ya convierte [label](url) en <a href="url">label</a>.
+  //    Solo necesitamos asegurar que los enlaces de descarga tengan el atributo download si apuntan a /api/download
+  //    o forzar target="_blank" en todos los enlaces.
+  
+  // Usamos un contenedor temporal para manipular el DOM resultante
   const temp = document.createElement("div");
   temp.innerHTML = html;
-  container.innerHTML = temp.innerHTML.trim();
+
+  // Post-procesamiento de enlaces
+  const links = temp.querySelectorAll("a");
+  links.forEach(a => {
+    a.target = "_blank";
+    a.rel = "noopener noreferrer";
+    if (a.href.includes("/api/download/")) {
+      a.download = ""; // Activar descarga
+      if (a.textContent === a.href) {
+         a.textContent = "Descargar archivo";
+      }
+    }
+  });
+
+  container.innerHTML = temp.innerHTML;
 }
 
 function escapeHtml(str) {

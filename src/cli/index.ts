@@ -1,9 +1,9 @@
 import chalk from "chalk";
 import readline from "readline";
 import { ChatAgent } from "../core/chatAgent.js";
-import { BASE_URL, MODEL } from "../config/index.js";
+import { BASE_URL, MODEL, getConfig } from "../config/index.js";
 
-const agent = new ChatAgent();
+const agent = new ChatAgent(getConfig());
 
 const rl = readline.createInterface({
   input: process.stdin,

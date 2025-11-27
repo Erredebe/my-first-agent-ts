@@ -26,7 +26,8 @@
 
 body {
   margin: 0;
-  min-height: 100vh;
+  height: 100vh;
+  overflow: hidden;
 }
 
 .page {
@@ -35,7 +36,8 @@ body {
   padding: 18px;
   display: flex;
   flex-direction: column;
-  min-height: 100vh;
+  height: 100vh;
+  overflow: hidden;
 }
 
 header {
@@ -95,6 +97,7 @@ h1 {
   flex: 1 1 auto;
   display: flex;
   flex-direction: column;
+  overflow: hidden;
 }
 
 .messages {
@@ -128,6 +131,26 @@ h1 {
   border: 1px solid var(--border);
   color: var(--assistant-bubble-text);
   box-shadow: 0 6px 14px rgba(9, 30, 55, 0.03);
+  /* Al usar markdown, necesitamos que el HTML fluya normal */
+  white-space: normal;
+}
+
+.bubble.assistant p {
+  margin: 0 0 10px 0;
+}
+.bubble.assistant p:last-child {
+  margin-bottom: 0;
+}
+.bubble.assistant ul, .bubble.assistant ol {
+  margin: 0 0 10px 0;
+  padding-left: 24px;
+}
+.bubble.assistant pre {
+  margin: 10px 0;
+  padding: 10px;
+  background: rgba(0,0,0,0.03);
+  border-radius: 6px;
+  overflow-x: auto;
 }
 
 /* Burbuja temporal de "pensando" */

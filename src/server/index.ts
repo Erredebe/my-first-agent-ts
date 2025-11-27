@@ -5,6 +5,8 @@ import { exec } from "child_process";
 import { fileURLToPath } from "url";
 import { ChatAgent } from "../core/chatAgent.js";
 import { getDownloadPath } from "./downloads.js";
+import { getConfig } from "../config/index.js";
+import { Logger } from "../core/logger.js";
 
 /**
  * Servidor Express que expone la API de chat y sirve el frontal web.
@@ -18,15 +20,32 @@ const __dirname = path.dirname(__filename);
 const publicDir = path.resolve(__dirname, "../../public");
 
 // Cada pestaña del navegador conserva su sesión de conversación.
-const agents = new Map<string, ChatAgent>();
+const agents = new Map<string, { agent: ChatAgent; lastActive: number }>();
+const SESSION_TIMEOUT_MS = 60 * 60 * 1000; // 1 hora
 
 function getAgent(sessionId: string): ChatAgent {
   const existing = agents.get(sessionId);
-  if (existing) return existing;
-  const agent = new ChatAgent();
-  agents.set(sessionId, agent);
+  if (existing) {
+    existing.lastActive = Date.now();
+    return existing.agent;
+  }
+  
+  const config = getConfig();
+  const agent = new ChatAgent(config);
+  agents.set(sessionId, { agent, lastActive: Date.now() });
   return agent;
 }
+
+// Limpieza de sesiones inactivas
+setInterval(() => {
+  const now = Date.now();
+  for (const [id, session] of agents.entries()) {
+    if (now - session.lastActive > SESSION_TIMEOUT_MS) {
+      agents.delete(id);
+      Logger.info(`Session ${id} expired and removed`, "Server");
+    }
+  }
+}, 5 * 60 * 1000); // Check every 5 minutes
 
 app.use(express.static(publicDir));
 
@@ -48,7 +67,7 @@ app.post("/api/chat", async (req: Request, res: Response) => {
     const reply = await agent.sendMessage(message);
     res.json({ reply, sessionId: sid });
   } catch (err) {
-    console.error("[server] fallo en /api/chat:", err);
+    Logger.error("Error in /api/chat", err, "Server");
     res.status(500).json({ error: (err as Error).message });
   }
 });
@@ -68,16 +87,28 @@ app.get("/api/download/:token", async (req: Request, res: Response) => {
         `[server] error sending file for token ${token}:`,
         err.message
       );
-    else console.log(`[server] download sent for token ${token}`);
+    else Logger.info(`Download sent for token ${token}`, "Server");
   });
 });
 
 const port = process.env.PORT ? Number(process.env.PORT) : 3000;
 if (process.env.NODE_ENV !== "test") {
-  app.listen(port, () => {
-    console.log(`Frontend listo en http://localhost:${port}`);
+  const server = app.listen(port, () => {
+    Logger.info(`Frontend ready at http://localhost:${port}`, "Server");
     openBrowser(`http://localhost:${port}`);
   });
+
+  // Graceful shutdown
+  const shutdown = () => {
+    Logger.info("Shutting down server...", "Server");
+    server.close(() => {
+      Logger.info("Server closed", "Server");
+      process.exit(0);
+    });
+  };
+
+  process.on("SIGTERM", shutdown);
+  process.on("SIGINT", shutdown);
 }
 
 /**

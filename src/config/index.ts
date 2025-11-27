@@ -8,6 +8,13 @@ const DEFAULT_BASE_URL = "http://127.0.0.1:1234/v1";
 const DEFAULT_SYSTEM_PROMPT = "Eres un asistente útil y conciso.";
 const DEFAULT_API_KEY = "not-needed";
 
+export interface Config {
+  model: string;
+  baseURL: string;
+  apiKey: string;
+  systemPrompt: string;
+}
+
 // Modelo a usar; acepta rutas tipo "proveedor/modelo".
 export const MODEL = process.env.MODEL ?? DEFAULT_MODEL;
 
@@ -22,3 +29,12 @@ export const SYSTEM_PROMPT = process.env.SYSTEM_PROMPT ?? DEFAULT_SYSTEM_PROMPT;
 
 // Límite de lectura para herramientas de archivo (evita archivos enormes).
 export const DEFAULT_MAX_READ_BYTES = 200_000;
+
+export function getConfig(): Config {
+  return {
+    model: MODEL,
+    baseURL: BASE_URL,
+    apiKey: API_KEY,
+    systemPrompt: SYSTEM_PROMPT,
+  };
+}

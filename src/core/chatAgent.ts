@@ -1,19 +1,25 @@
 import { OpenAI } from "openai";
-import { API_KEY, BASE_URL, MODEL, SYSTEM_PROMPT } from "../config/index.js";
+import { Config } from "../config/index.js";
 import { fileTools, executeFileToolCall } from "../tools/fileTools.js";
 import { MessageParam, ToolCall } from "./types.js";
+import { Logger } from "./logger.js";
 
 /**
  * Pequeño orquestador que conserva el historial, invoca el modelo
  * y ejecuta herramientas cuando el modelo las solicita.
  */
 export class ChatAgent {
-  private readonly client = new OpenAI({ apiKey: API_KEY, baseURL: BASE_URL });
+  private readonly client: OpenAI;
+  private readonly config: Config;
 
   // Historial de conversación que se envía en cada petición.
-  private conversation: MessageParam[] = [
-    { role: "system", content: SYSTEM_PROMPT }
-  ];
+  private conversation: MessageParam[];
+
+  constructor(config: Config) {
+    this.config = config;
+    this.client = new OpenAI({ apiKey: config.apiKey, baseURL: config.baseURL });
+    this.conversation = [{ role: "system", content: config.systemPrompt }];
+  }
 
   /**
    * Envía un mensaje del usuario, devuelve la respuesta del asistente
@@ -43,8 +49,11 @@ export class ChatAgent {
   /**
    * Borra el contexto manteniendo el prompt del sistema.
    */
+  /**
+   * Borra el contexto manteniendo el prompt del sistema.
+   */
   resetContext(): void {
-    this.conversation = [{ role: "system", content: SYSTEM_PROMPT }];
+    this.conversation = [{ role: "system", content: this.config.systemPrompt }];
   }
 
   /**
@@ -85,17 +94,37 @@ export class ChatAgent {
   /**
    * Ejecuta todas las tool_calls y agrega los mensajes "tool" al historial.
    */
+  /**
+   * Ejecuta todas las tool_calls y agrega los mensajes "tool" al historial.
+   */
   private async runToolCalls(
     toolCalls: OpenAI.Chat.Completions.ChatCompletionMessageToolCall[]
   ): Promise<string[]> {
     const outputs: string[] = [];
 
-    for (const call of toolCalls) {
-      const toolResult = await executeFileToolCall(call as ToolCall);
-      if (typeof toolResult.content === "string") {
-        outputs.push(toolResult.content);
+    // Ejecución en paralelo
+    const results = await Promise.all(
+      toolCalls.map(async (call) => {
+        try {
+          Logger.info(`Executing tool: ${call.function.name}`, "ChatAgent");
+          const toolResult = await executeFileToolCall(call as ToolCall);
+          return toolResult;
+        } catch (error) {
+          Logger.error(`Error executing tool ${call.function.name}`, error, "ChatAgent");
+          return {
+            role: "tool",
+            tool_call_id: call.id,
+            content: `Error executing tool: ${error instanceof Error ? error.message : String(error)}`
+          } as OpenAI.Chat.Completions.ChatCompletionToolMessageParam;
+        }
+      })
+    );
+
+    for (const result of results) {
+       if (typeof result.content === "string") {
+        outputs.push(result.content);
       }
-      this.conversation.push(toolResult);
+      this.conversation.push(result);
     }
 
     return outputs;
@@ -107,14 +136,19 @@ export class ChatAgent {
   private async requestMessage(
     allowTools: boolean
   ): Promise<OpenAI.Chat.Completions.ChatCompletionMessage | null> {
-    const completion = await this.client.chat.completions.create({
-      model: MODEL,
-      messages: this.conversation,
-      tools: allowTools ? fileTools : undefined,
-      tool_choice: allowTools ? "auto" : undefined
-    });
+    try {
+      const completion = await this.client.chat.completions.create({
+        model: this.config.model,
+        messages: this.conversation,
+        tools: allowTools ? fileTools : undefined,
+        tool_choice: allowTools ? "auto" : undefined
+      });
 
-    return completion.choices[0]?.message ?? null;
+      return completion.choices[0]?.message ?? null;
+    } catch (error) {
+      Logger.error("Error requesting message from OpenAI", error, "ChatAgent");
+      return null;
+    }
   }
 
   /**
