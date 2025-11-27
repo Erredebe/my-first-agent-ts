@@ -1,6 +1,7 @@
 import express, { Request, Response } from "express";
 import path from "path";
 import { randomUUID } from "crypto";
+import { exec } from "child_process";
 import { fileURLToPath } from "url";
 import { ChatAgent } from "../core/chatAgent.js";
 import { getDownloadPath } from "./downloads.js";
@@ -54,4 +55,16 @@ app.get("/api/download/:token", async (req: Request, res: Response) => {
 const port = process.env.PORT ? Number(process.env.PORT) : 3000;
 app.listen(port, () => {
   console.log(`Frontend listo en http://localhost:${port}`);
+  openBrowser(`http://localhost:${port}`);
 });
+
+function openBrowser(url: string) {
+  const platform = process.platform;
+  const command =
+    platform === "win32"
+      ? `start "" "${url}"`
+      : platform === "darwin"
+        ? `open "${url}"`
+        : `xdg-open "${url}"`;
+  exec(command);
+}
