@@ -94,43 +94,32 @@ function renderAssistantContent(container, text) {
         `<a href="${url}" target="_blank" rel="noopener noreferrer" download>Descargar archivo</a>`
     );
 
-  // Parse the HTML and keep only download links that point to /api/download/
+  // If we can find a download URL (either absolute or relative), build a clean anchor
+  const downloadUrlMatch = html.match(
+    /(https?:\/\/[\w:\-\.\/]+\/api\/download\/[a-zA-Z0-9-]+|\/api\/download\/[a-zA-Z0-9-]+)/
+  );
+  const downloadAttrMatch = html.match(/download=\"([^\"]+)\"/);
+  if (downloadUrlMatch) {
+    const url = downloadUrlMatch[0];
+    const filename = downloadAttrMatch
+      ? downloadAttrMatch[1]
+      : "Descargar archivo";
+    // Build a minimal, safe anchor so the browser can trigger the download
+    const a = document.createElement("a");
+    a.href = url;
+    a.target = "_blank";
+    a.rel = "noopener noreferrer";
+    a.download = filename;
+    a.textContent = filename;
+    // Clear container and append the anchor
+    container.innerHTML = "";
+    container.appendChild(a);
+    return;
+  }
+
+  // Fallback: render any markdown/downloadPath conversions we made earlier
   const temp = document.createElement("div");
   temp.innerHTML = html;
-
-  // Remove anchors that do NOT point to /api/download/
-  Array.from(temp.querySelectorAll("a")).forEach((a) => {
-    const href = a.getAttribute("href") || "";
-    if (!/\/api\/download\//.test(href)) {
-      a.remove();
-    }
-  });
-
-  // Remove stray text nodes that contain local file paths or broken HTML fragments
-  const walker = document.createTreeWalker(
-    temp,
-    NodeFilter.SHOW_TEXT,
-    null,
-    false
-  );
-  const toRemove = [];
-  while (walker.nextNode()) {
-    const node = walker.currentNode;
-    const v = node.nodeValue || "";
-    if (
-      /[A-Za-z]:\\/.test(v) ||
-      /download=\"/.test(v) ||
-      /Descargar archivo\"/.test(v)
-    ) {
-      toRemove.push(node);
-    }
-  }
-  toRemove.forEach((n) => {
-    const p = n.parentNode;
-    n.remove();
-    if (p && p.childNodes.length === 0) p.remove();
-  });
-
   container.innerHTML = temp.innerHTML.trim();
 }
 
