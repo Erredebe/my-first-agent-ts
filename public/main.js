@@ -6,6 +6,9 @@ const statusText = document.getElementById("status-text");
 
 let sessionId = localStorage.getItem("agent-session") || null;
 
+// Estado que indica si el agente está procesando una respuesta
+let isThinking = false;
+
 // Extract sending logic to reuse from keyboard handlers
 async function sendFormMessage(rawText) {
   const text = rawText.trim();
@@ -50,6 +53,7 @@ async function sendFormMessage(rawText) {
 
 form.addEventListener("submit", async (e) => {
   e.preventDefault();
+  if (isThinking) return; // bloquear envíos mientras piensa
   await sendFormMessage(input.value);
 });
 
@@ -61,13 +65,34 @@ function appendBubble(text, role) {
   } else {
     div.textContent = text;
   }
-  messages.appendChild(div);
+  // If there's a thinking bubble visible, replace it with the assistant response
+  const thinking = document.getElementById("thinking-bubble");
+  if (role === "assistant" && thinking) {
+    messages.replaceChild(div, thinking);
+  } else {
+    messages.appendChild(div);
+  }
   messages.scrollTop = messages.scrollHeight;
 }
 
 function setLoading(isLoading) {
   sendBtn.disabled = isLoading;
   statusText.textContent = isLoading ? "Pensando..." : "Listo";
+  isThinking = !!isLoading;
+  if (isLoading) {
+    // show a temporary assistant bubble indicating thinking
+    if (!document.getElementById("thinking-bubble")) {
+      const thinkingDiv = document.createElement("div");
+      thinkingDiv.id = "thinking-bubble";
+      thinkingDiv.className = "bubble assistant thinking";
+      thinkingDiv.innerHTML = `<span class="thinking-dots">Pensando<span class="dots">&nbsp;&middot;&nbsp;&middot;&nbsp;&middot;</span></span>`;
+      messages.appendChild(thinkingDiv);
+      messages.scrollTop = messages.scrollHeight;
+    }
+  } else {
+    const existing = document.getElementById("thinking-bubble");
+    if (existing) existing.remove();
+  }
 }
 
 function renderAssistantContent(container, text) {
@@ -93,6 +118,13 @@ function renderAssistantContent(container, text) {
       (url) =>
         `<a href="${url}" target="_blank" rel="noopener noreferrer" download>Descargar archivo</a>`
     );
+
+  // Resaltar bloques <think> transformándolos en un bloque colapsable <details>
+  const thinkRegex = /<think>([\s\S]*?)<\/think>/gi;
+  html = html.replace(thinkRegex, (_m, body) => {
+    const safe = escapeHtml(body.trim());
+    return `<details class="think-block"><summary class="think-summary">Mostrar contenido</summary><div class="think-body">${safe}</div></details>`;
+  });
 
   // If we can find a download URL (either absolute or relative), build a clean anchor
   const downloadUrlMatch = html.match(
@@ -123,9 +155,22 @@ function renderAssistantContent(container, text) {
   container.innerHTML = temp.innerHTML.trim();
 }
 
+function escapeHtml(str) {
+  return str
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
 // Allow pressing Enter to send the message (Shift+Enter for newline)
 input.addEventListener("keydown", (e) => {
   if (e.key === "Enter" && !e.shiftKey) {
+    if (isThinking) {
+      e.preventDefault();
+      return; // bloquear Enter mientras está pensando
+    }
     e.preventDefault();
     // Submit the form programmatically; this will trigger our submit handler
     if (typeof form.requestSubmit === "function") {
@@ -142,6 +187,10 @@ input.addEventListener("keydown", (e) => {
 sendBtn.addEventListener("keydown", (e) => {
   if (e.key === "Enter") {
     e.preventDefault();
+    if (isThinking) {
+      input.focus();
+      return; // bloquear si está pensando
+    }
     if (typeof form.requestSubmit === "function") form.requestSubmit();
     else
       form.dispatchEvent(
