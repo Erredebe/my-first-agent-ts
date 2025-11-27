@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Agente GPT OSS</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <div class="page">
+      <header>
+        <div>
+          <p class="eyebrow">Agente local</p>
+          <h1>GPT OSS</h1>
+          <p class="muted">Habla con el modelo en tu máquina. Mantén la pestaña abierta para conservar el contexto.</p>
+        </div>
+        <div class="status">
+          <span class="dot"></span>
+          <span id="status-text">Listo</span>
+        </div>
+      </header>
+
+      <main class="panel">
+        <div id="messages" class="messages"></div>
+
+        <form id="chat-form" class="input-bar">
+          <textarea id="message-input" rows="2" placeholder="Escribe tu mensaje..."></textarea>
+          <button type="submit" id="send-btn">Enviar</button>
+        </form>
+      </main>
+    </div>
+
+    <script type="module" src="/main.js"></script>
+  </body>
+</html>

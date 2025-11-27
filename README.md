@@ -7,6 +7,8 @@ Estructura:
 - `src/core/` : lógica del agente y tipos (`chatAgent.ts`, `types.ts`).
 - `src/tools/` : herramientas locales (`fileTools.ts`).
 - `src/cli/` : entrada de consola (`index.ts`).
+- `src/server/` : servidor Express que expone API y sirve la UI.
+- `public/` : frontal web (HTML/CSS/JS).
 
 ## Prerrequisitos
 - Node.js 18+ y npm
@@ -36,8 +38,15 @@ npm start
   - `read_file(file_path, max_bytes?)` : lee archivos (limita a 200 KB por defecto).
   - `write_file(file_path, content, mode=replace|append)` : sobrescribe o añade.
 
+### Frontal web
+```bash
+npm run start:web
+```
+- Abre `http://localhost:3000` y chatea desde el navegador (la sesión se conserva en localStorage).
+
 ## Scripts útiles
 - `npm start` : ejecuta el agente con `tsx` (sin build previo).
+- `npm run start:web` : lanza el servidor Express + frontal web.
 - `npm run build` : compila a `dist/` con `tsc`.
 
 ## Notas

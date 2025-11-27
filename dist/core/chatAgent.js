@@ -1,4 +1,3 @@
-import chalk from "chalk";
 import { OpenAI } from "openai";
 import { API_KEY, BASE_URL, MODEL, SYSTEM_PROMPT } from "../config/index.js";
 import { fileTools, executeFileToolCall } from "../tools/fileTools.js";
@@ -7,13 +6,12 @@ export class ChatAgent {
     conversation = [
         { role: "system", content: SYSTEM_PROMPT }
     ];
-    async handleUserMessage(prompt) {
+    async sendMessage(prompt) {
         this.conversation.push({ role: "user", content: prompt });
         const first = await this.createCompletion(this.conversation, true);
         const firstMessage = first.choices[0]?.message;
         if (!firstMessage) {
-            console.error(chalk.red("Respuesta vacía del modelo."));
-            return;
+            return null;
         }
         if (firstMessage.tool_calls?.length) {
             this.conversation.push({
@@ -29,14 +27,15 @@ export class ChatAgent {
             const finalMessage = second.choices[0]?.message;
             if (finalMessage?.content) {
                 this.conversation.push({ role: "assistant", content: finalMessage.content });
-                this.printAssistant(finalMessage.content);
+                return finalMessage.content;
             }
-            return;
+            return null;
         }
         if (firstMessage.content) {
             this.conversation.push({ role: "assistant", content: firstMessage.content });
-            this.printAssistant(firstMessage.content);
+            return firstMessage.content;
         }
+        return null;
     }
     resetContext() {
         this.conversation = [{ role: "system", content: SYSTEM_PROMPT }];
@@ -48,8 +47,5 @@ export class ChatAgent {
             tools: allowTools ? fileTools : undefined,
             tool_choice: allowTools ? "auto" : undefined
         });
-    }
-    printAssistant(text) {
-        process.stdout.write(chalk.blue("agente > ") + text + "\n");
     }
 }

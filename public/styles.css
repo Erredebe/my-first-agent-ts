@@ -1,0 +1,160 @@
+:root {
+  font-family: "Space Grotesk", system-ui, -apple-system, sans-serif;
+  color: #dfe5f5;
+  background: radial-gradient(circle at 10% 10%, #253155, #0f1629 40%);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+}
+
+.page {
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 32px 20px 48px;
+}
+
+header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+}
+
+.eyebrow {
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-size: 12px;
+  color: #7ea4ff;
+  margin: 0 0 4px;
+}
+
+h1 {
+  margin: 0 0 8px;
+  font-size: 34px;
+  color: #f4f7ff;
+}
+
+.muted {
+  margin: 0;
+  color: #97a7c2;
+}
+
+.status {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border: 1px solid #1f2c4d;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.05);
+  color: #b8c7e6;
+  font-weight: 500;
+}
+
+.dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #4ade80;
+  box-shadow: 0 0 12px #4ade80aa;
+}
+
+.panel {
+  margin-top: 24px;
+  padding: 20px;
+  border-radius: 16px;
+  background: rgba(16, 26, 45, 0.8);
+  border: 1px solid #1d2b4a;
+  backdrop-filter: blur(6px);
+  box-shadow: 0 10px 50px rgba(5, 7, 15, 0.6);
+}
+
+.messages {
+  min-height: 320px;
+  max-height: 60vh;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 4px;
+}
+
+.bubble {
+  border-radius: 12px;
+  padding: 12px 14px;
+  line-height: 1.45;
+  white-space: pre-wrap;
+}
+
+.bubble.user {
+  align-self: flex-end;
+  background: linear-gradient(135deg, #2341ff, #3ba0ff);
+  color: #f7fbff;
+}
+
+.bubble.assistant {
+  align-self: flex-start;
+  background: #151f35;
+  border: 1px solid #1f2c4d;
+  color: #dce6ff;
+}
+
+.input-bar {
+  margin-top: 16px;
+  display: flex;
+  gap: 12px;
+  align-items: flex-end;
+}
+
+textarea {
+  flex: 1;
+  resize: vertical;
+  min-height: 48px;
+  max-height: 160px;
+  border-radius: 12px;
+  border: 1px solid #1f2c4d;
+  background: #0f172a;
+  color: #e6edff;
+  padding: 12px;
+  font-family: inherit;
+  font-size: 15px;
+}
+
+button {
+  border: none;
+  border-radius: 12px;
+  padding: 12px 18px;
+  background: linear-gradient(135deg, #3ba0ff, #6de0f8);
+  color: #071229;
+  font-weight: 700;
+  cursor: pointer;
+  transition: transform 0.12s ease, box-shadow 0.12s ease;
+}
+
+button:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 8px 20px rgba(97, 182, 255, 0.3);
+}
+
+button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+}
+
+@media (max-width: 640px) {
+  header {
+    flex-direction: column;
+  }
+
+  .panel {
+    padding: 16px;
+  }
+}

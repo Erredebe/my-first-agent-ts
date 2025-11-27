@@ -51,7 +51,10 @@ async function main() {
       continue;
     }
 
-    await agent.handleUserMessage(input);
+    const reply = await agent.sendMessage(input);
+    if (reply) {
+      process.stdout.write(chalk.blue("agente > ") + reply + "\n");
+    }
     rl.prompt();
   }
 }
