@@ -1,6 +1,12 @@
 # Agente IA CLI (TypeScript)
 
-CLI sencilla en TypeScript para chatear con un servidor OpenAI-compatible (ej. `lm-studio`, `llama.cpp` HTTP) usando el modelo `openai/gpt-oss-20b` en `http://127.0.0.1:1234/v1`.
+CLI en TypeScript para chatear con un servidor OpenAI-compatible (ej. `lm-studio`, `llama.cpp` HTTP) usando el modelo `openai/gpt-oss-20b` en `http://127.0.0.1:1234/v1`.
+
+Estructura:
+- `src/config.ts` : configuración base (modelo, URL, prompts).
+- `src/tools.ts` : herramientas locales (leer/escribir archivos).
+- `src/chat.ts` : orquestación del agente y llamadas a la API.
+- `src/index.ts` : CLI (readline) y comandos de usuario.
 
 ## Prerrequisitos
 - Node.js 18+ y npm
@@ -14,6 +20,8 @@ npm install
 ## Variables de entorno
 - `OPENAI_BASE_URL` (opcional): URL base del servidor. Por defecto `http://127.0.0.1:1234/v1`.
 - `OPENAI_API_KEY` (opcional): clave si tu servidor la requiere. Se usa `"not-needed"` por defecto.
+- `MODEL` (opcional): modelo a usar. Por defecto `openai/gpt-oss-20b`.
+- `SYSTEM_PROMPT` (opcional): prompt del sistema.
 
 ## Uso
 ```bash
@@ -21,14 +29,17 @@ npm start
 ```
 
 - Escribe tu mensaje y pulsa Enter.
-- Comandos:
+- Comandos CLI:
   - `/borrar` : limpia el contexto manteniendo el system prompt.
   - `/salir`  : cierra la sesión.
+- Herramientas disponibles (el modelo decide llamarlas):
+  - `read_file(file_path, max_bytes?)` : lee archivos (limita a 200 KB por defecto).
+  - `write_file(file_path, content, mode=replace|append)` : sobrescribe o añade.
 
 ## Scripts útiles
 - `npm start` : ejecuta el agente con `tsx` (sin build previo).
 - `npm run build` : compila a `dist/` con `tsc`.
 
 ## Notas
-- El modelo configurado es `openai/gpt-oss-20b`. Cámbialo en `src/index.ts` si necesitas otro.
+- Cambia modelo/URL/prompt en `src/config.ts` o vía variables de entorno.
 - El streaming se muestra en tiempo real en la consola.
