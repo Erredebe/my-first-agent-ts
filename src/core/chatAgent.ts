@@ -1,8 +1,12 @@
 import { OpenAI } from "openai";
 import { Config } from "../config/index.js";
 import { fileTools, executeFileToolCall } from "../tools/fileTools.js";
+import { webTools, executeWebToolCall } from "../tools/webTools.js";
 import { MessageParam, ToolCall } from "./types.js";
 import { Logger } from "./logger.js";
+
+// Combinar todas las herramientas disponibles
+const allTools = [...fileTools, ...webTools];
 
 /**
  * Pequeño orquestador que conserva el historial, invoca el modelo
@@ -107,7 +111,11 @@ export class ChatAgent {
       toolCalls.map(async (call) => {
         try {
           Logger.info(`Executing tool: ${call.function.name}`, "ChatAgent");
-          const toolResult = await executeFileToolCall(call as ToolCall);
+          // Determinar qué executor usar según el nombre de la herramienta
+          const isWebTool = webTools.some(t => t.function.name === call.function.name);
+          const toolResult = isWebTool 
+            ? await executeWebToolCall(call as ToolCall)
+            : await executeFileToolCall(call as ToolCall);
           return toolResult;
         } catch (error) {
           Logger.error(`Error executing tool ${call.function.name}`, error, "ChatAgent");
@@ -140,7 +148,7 @@ export class ChatAgent {
       const completion = await this.client.chat.completions.create({
         model: this.config.model,
         messages: this.conversation,
-        tools: allowTools ? fileTools : undefined,
+        tools: allowTools ? allTools : undefined,
         tool_choice: allowTools ? "auto" : undefined
       });
 
