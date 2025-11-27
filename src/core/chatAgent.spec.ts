@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { ChatAgent } from "./chatAgent.js";
+import { getConfig } from "../config/index.js";
 
 // Mocks (hoisted para que Vitest los ejecute antes de cargar el módulo)
 const createCompletionMock = vi.hoisted(() => vi.fn());
@@ -28,12 +29,13 @@ describe("ChatAgent", () => {
     executeFileToolCallMock.mockReset();
   });
 
+
   it("devuelve la respuesta directa del modelo cuando no hay tools", async () => {
     createCompletionMock.mockResolvedValueOnce({
       choices: [{ message: { role: "assistant", content: "Hola" } }]
     });
 
-    const agent = new ChatAgent();
+    const agent = new ChatAgent(getConfig());
     const reply = await agent.sendMessage("ping");
 
     expect(reply).toBe("Hola");
@@ -75,7 +77,7 @@ describe("ChatAgent", () => {
       content: "tool-output"
     });
 
-    const agent = new ChatAgent();
+    const agent = new ChatAgent(getConfig());
     const reply = await agent.sendMessage("usa la tool");
 
     expect(reply).toBe("Hecho\n\ntool-output");
@@ -84,7 +86,7 @@ describe("ChatAgent", () => {
   });
 
   it("ignora envíos vacíos", async () => {
-    const agent = new ChatAgent();
+    const agent = new ChatAgent(getConfig());
     const reply = await agent.sendMessage("   ");
     expect(reply).toBeNull();
     expect(createCompletionMock).not.toHaveBeenCalled();
