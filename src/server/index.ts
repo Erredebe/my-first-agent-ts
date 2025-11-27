@@ -26,13 +26,17 @@ function getAgent(sessionId: string): ChatAgent {
 app.use(express.static(publicDir));
 
 app.post("/api/chat", async (req: Request, res: Response) => {
-  const { message, sessionId } = req.body as { message?: string; sessionId?: string };
+  const { message, sessionId } = req.body as {
+    message?: string;
+    sessionId?: string;
+  };
 
   if (!message || typeof message !== "string") {
     return res.status(400).json({ error: "Falta 'message'" });
   }
 
-  const sid = sessionId && typeof sessionId === "string" ? sessionId : randomUUID();
+  const sid =
+    sessionId && typeof sessionId === "string" ? sessionId : randomUUID();
   const agent = getAgent(sid);
 
   try {
@@ -46,10 +50,20 @@ app.post("/api/chat", async (req: Request, res: Response) => {
 app.get("/api/download/:token", async (req: Request, res: Response) => {
   const { token } = req.params;
   const filePath = token ? getDownloadPath(token) : undefined;
+  console.log(`[server] /api/download request for token=${token}`);
   if (!filePath) {
+    console.log(`[server] token not found: ${token}`);
     return res.status(404).send("Enlace no válido o caducado");
   }
-  return res.download(filePath, path.basename(filePath));
+  console.log(`[server] sending file ${filePath} for token ${token}`);
+  return res.download(filePath, path.basename(filePath), (err) => {
+    if (err)
+      console.error(
+        `[server] error sending file for token ${token}:`,
+        err.message
+      );
+    else console.log(`[server] download sent for token ${token}`);
+  });
 });
 
 const port = process.env.PORT ? Number(process.env.PORT) : 3000;
@@ -64,7 +78,7 @@ function openBrowser(url: string) {
     platform === "win32"
       ? `start "" "${url}"`
       : platform === "darwin"
-        ? `open "${url}"`
-        : `xdg-open "${url}"`;
+      ? `open "${url}"`
+      : `xdg-open "${url}"`;
   exec(command);
 }
