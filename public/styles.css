@@ -133,6 +133,36 @@ h1 {
   box-shadow: 0 6px 14px rgba(9, 30, 55, 0.03);
 }
 
+/* Thinking bubble */
+.bubble.thinking {
+  opacity: 0.95;
+  font-style: italic;
+  color: var(--muted);
+  background: linear-gradient(180deg, #f7fafc 0%, #f3f6f9 100%);
+  border: 1px dashed var(--border);
+}
+.thinking-dots .dots {
+  display: inline-block;
+  margin-left: 6px;
+  color: var(--accent);
+  font-weight: 700;
+  animation: dots 1s steps(3, end) infinite;
+}
+@keyframes dots {
+  0% {
+    content: "\00a0\00b7\00a0\00b7\00a0\00b7";
+  }
+  33% {
+    transform: translateY(0);
+  }
+  66% {
+    transform: translateY(0);
+  }
+  100% {
+    transform: translateY(0);
+  }
+}
+
 .think-block {
   margin-top: 10px;
   padding: 12px;
@@ -228,4 +258,34 @@ button:disabled {
   .panel {
     padding: 16px;
   }
+}
+
+/* Think-block styles: collapsed by default (using <details>) */
+.think-block {
+  margin: 6px 0;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: linear-gradient(
+    180deg,
+    rgba(250, 250, 252, 0.9),
+    rgba(243, 246, 249, 0.9)
+  );
+  overflow: hidden;
+}
+.think-block .think-summary {
+  list-style: none;
+  cursor: pointer;
+  padding: 8px 12px;
+  font-weight: 600;
+  color: var(--text);
+  background: transparent;
+  border: none;
+}
+.think-block[open] .think-summary {
+  border-bottom: 1px solid var(--border);
+}
+.think-block .think-body {
+  padding: 10px 12px;
+  color: var(--text);
+  white-space: pre-wrap;
 }

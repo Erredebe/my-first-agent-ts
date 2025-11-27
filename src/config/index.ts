@@ -1,5 +1,6 @@
 //export const MODEL = process.env.MODEL ?? "openai/gpt-oss-20b";
-export const MODEL = process.env.MODEL ?? "qwen/qwen3-4b-thinking-2507";
+//export const MODEL = process.env.MODEL ?? "qwen/qwen3-4b-thinking-2507";
+export const MODEL = process.env.MODEL ?? "deepseek/deepseek-r1-0528-qwen3-8b";
 export const BASE_URL =
   process.env.OPENAI_BASE_URL ?? "http://127.0.0.1:1234/v1";
 export const API_KEY = process.env.OPENAI_API_KEY ?? "not-needed";
