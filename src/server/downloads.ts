@@ -1,5 +1,6 @@
 import { randomUUID } from "crypto";
 
+// Mapeo en memoria: token -> ruta de archivo. No hay persistencia ni limpieza.
 const downloads = new Map<string, string>();
 
 export async function createDownloadToken(filePath: string): Promise<string> {

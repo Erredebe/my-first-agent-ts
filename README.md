@@ -1,18 +1,18 @@
 # Agente IA CLI (TypeScript)
 
-CLI en TypeScript para chatear con un servidor OpenAI-compatible (ej. `lm-studio`, `llama.cpp` HTTP) usando el modelo `openai/gpt-oss-20b` en `http://127.0.0.1:1234/v1`.
+CLI en TypeScript para chatear con un servidor compatible con la API de OpenAI (por ejemplo `lm-studio` o `llama.cpp` HTTP) usando el modelo por defecto `deepseek/deepseek-r1-0528-qwen3-8b` en `http://127.0.0.1:1234/v1`.
 
 Estructura:
 - `src/config/` : configuración base (modelo, URL, prompts).
 - `src/core/` : lógica del agente y tipos (`chatAgent.ts`, `types.ts`).
 - `src/tools/` : herramientas locales (`fileTools.ts`).
 - `src/cli/` : entrada de consola (`index.ts`).
-- `src/server/` : servidor Express que expone API y sirve la UI.
+- `src/server/` : servidor Express que expone la API y sirve la UI.
 - `public/` : frontal web (HTML/CSS/JS).
 
 ## Prerrequisitos
 - Node.js 18+ y npm
-- Servidor HTTP compatible con la API de OpenAI corriendo en `http://127.0.0.1:1234/v1` (puedes ajustar la URL con una variable de entorno)
+- Servidor HTTP compatible con la API de OpenAI corriendo en `http://127.0.0.1:1234/v1` (ajustable vía variable de entorno)
 
 ## Instalación
 ```bash
@@ -22,7 +22,7 @@ npm install
 ## Variables de entorno
 - `OPENAI_BASE_URL` (opcional): URL base del servidor. Por defecto `http://127.0.0.1:1234/v1`.
 - `OPENAI_API_KEY` (opcional): clave si tu servidor la requiere. Se usa `"not-needed"` por defecto.
-- `MODEL` (opcional): modelo a usar. Por defecto `openai/gpt-oss-20b`.
+- `MODEL` (opcional): modelo a usar. Por defecto `deepseek/deepseek-r1-0528-qwen3-8b`.
 - `SYSTEM_PROMPT` (opcional): prompt del sistema.
 
 ## Uso
@@ -37,17 +37,20 @@ npm start
 - Herramientas disponibles (el modelo decide llamarlas):
   - `read_file(file_path, max_bytes?)` : lee archivos (limita a 200 KB por defecto).
   - `write_file(file_path, content, mode=replace|append)` : sobrescribe o añade.
+  - `prepare_file_download(file_path, content, mode=replace|append)` : escribe y genera enlace de descarga.
+  - `prepare_download(file_path)` : genera enlace de descarga de un archivo existente.
 
 ### Frontal web
 ```bash
 npm run start:web
 ```
-- Abre `http://localhost:3000` y chatea desde el navegador (la sesión se conserva en localStorage).
+- Abre `http://localhost:3000` y chatea desde el navegador (la sesión se conserva en `localStorage`).
 
 ## Scripts útiles
 - `npm start` : ejecuta el agente con `tsx` (sin build previo).
 - `npm run start:web` : lanza el servidor Express + frontal web.
 - `npm run build` : compila a `dist/` con `tsc`.
+- `npm test` : ejecuta la batería de pruebas con Vitest.
 
 ## Notas
 - Cambia modelo/URL/prompt en `src/config/index.ts` o vía variables de entorno.

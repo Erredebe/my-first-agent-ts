@@ -1,10 +1,24 @@
-//export const MODEL = process.env.MODEL ?? "openai/gpt-oss-20b";
-//export const MODEL = process.env.MODEL ?? "qwen/qwen3-4b-thinking-2507";
-export const MODEL = process.env.MODEL ?? "deepseek/deepseek-r1-0528-qwen3-8b";
-export const BASE_URL =
-  process.env.OPENAI_BASE_URL ?? "http://127.0.0.1:1234/v1";
-export const API_KEY = process.env.OPENAI_API_KEY ?? "not-needed";
+/**
+ * Configuración centralizada de modelo y API.
+ * Todos los valores pueden sobrescribirse con variables de entorno para
+ * probar distintos backends y prompts sin tocar el código fuente.
+ */
+const DEFAULT_MODEL = "openai/gpt-oss-20b";
+const DEFAULT_BASE_URL = "http://127.0.0.1:1234/v1";
+const DEFAULT_SYSTEM_PROMPT = "Eres un asistente útil y conciso.";
+const DEFAULT_API_KEY = "not-needed";
 
-export const SYSTEM_PROMPT =
-  process.env.SYSTEM_PROMPT ?? "Eres un asistente útil y conciso.";
+// Modelo a usar; acepta rutas tipo "proveedor/modelo".
+export const MODEL = process.env.MODEL ?? DEFAULT_MODEL;
+
+// URL base compatible con la API de OpenAI (p. ej. LM Studio, llama.cpp HTTP).
+export const BASE_URL = process.env.OPENAI_BASE_URL ?? DEFAULT_BASE_URL;
+
+// En entornos locales suele bastar con una cadena de relleno.
+export const API_KEY = process.env.OPENAI_API_KEY ?? DEFAULT_API_KEY;
+
+// Prompt de arranque que marca el tono de las respuestas.
+export const SYSTEM_PROMPT = process.env.SYSTEM_PROMPT ?? DEFAULT_SYSTEM_PROMPT;
+
+// Límite de lectura para herramientas de archivo (evita archivos enormes).
 export const DEFAULT_MAX_READ_BYTES = 200_000;

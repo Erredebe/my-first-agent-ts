@@ -17,6 +17,9 @@ Escribe ${chalk.cyan("/salir")} para terminar o ${chalk.cyan("/borrar")} para li
 
 console.log(intro);
 
+/**
+ * Procesa comandos internos (no se envían al modelo).
+ */
 function handleCommand(input: string): "exit" | "handled" | "none" {
   if (input === "/salir") {
     rl.close();
@@ -54,6 +57,8 @@ async function main() {
     const reply = await agent.sendMessage(input);
     if (reply) {
       process.stdout.write(chalk.blue("agente > ") + reply + "\n");
+    } else {
+      process.stdout.write(chalk.yellow("No se recibió respuesta del modelo.\n"));
     }
     rl.prompt();
   }

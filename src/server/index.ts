@@ -6,13 +6,18 @@ import { fileURLToPath } from "url";
 import { ChatAgent } from "../core/chatAgent.js";
 import { getDownloadPath } from "./downloads.js";
 
-const app = express();
+/**
+ * Servidor Express que expone la API de chat y sirve el frontal web.
+ * Exportamos `app` para poder testear con supertest sin arrancar el servidor.
+ */
+export const app = express();
 app.use(express.json());
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const publicDir = path.resolve(__dirname, "../../public");
 
+// Cada pestaña del navegador conserva su sesión de conversación.
 const agents = new Map<string, ChatAgent>();
 
 function getAgent(sessionId: string): ChatAgent {
@@ -31,8 +36,8 @@ app.post("/api/chat", async (req: Request, res: Response) => {
     sessionId?: string;
   };
 
-  if (!message || typeof message !== "string") {
-    return res.status(400).json({ error: "Falta 'message'" });
+  if (!message || typeof message !== "string" || !message.trim()) {
+    return res.status(400).json({ error: "Falta 'message' o está vacío" });
   }
 
   const sid =
@@ -43,6 +48,7 @@ app.post("/api/chat", async (req: Request, res: Response) => {
     const reply = await agent.sendMessage(message);
     res.json({ reply, sessionId: sid });
   } catch (err) {
+    console.error("[server] fallo en /api/chat:", err);
     res.status(500).json({ error: (err as Error).message });
   }
 });
@@ -67,11 +73,16 @@ app.get("/api/download/:token", async (req: Request, res: Response) => {
 });
 
 const port = process.env.PORT ? Number(process.env.PORT) : 3000;
-app.listen(port, () => {
-  console.log(`Frontend listo en http://localhost:${port}`);
-  openBrowser(`http://localhost:${port}`);
-});
+if (process.env.NODE_ENV !== "test") {
+  app.listen(port, () => {
+    console.log(`Frontend listo en http://localhost:${port}`);
+    openBrowser(`http://localhost:${port}`);
+  });
+}
 
+/**
+ * Abre el navegador en la URL indicada en función del sistema operativo.
+ */
 function openBrowser(url: string) {
   const platform = process.platform;
   const command =

@@ -5,6 +5,10 @@ import { DEFAULT_MAX_READ_BYTES } from "../config/index.js";
 import { ToolCall } from "../core/types.js";
 import { createDownloadToken } from "../server/downloads.js";
 
+/**
+ * Definición pública de herramientas accesibles desde el modelo.
+ * Se describe cada firma en JSON Schema para que el LLM pueda llamarlas.
+ */
 export const fileTools: OpenAI.Chat.Completions.ChatCompletionTool[] = [
   {
     type: "function",
@@ -98,28 +102,52 @@ export const fileTools: OpenAI.Chat.Completions.ChatCompletionTool[] = [
   }
 ];
 
-export async function executeFileToolCall(toolCall: ToolCall): Promise<OpenAI.Chat.Completions.ChatCompletionToolMessageParam> {
+type HandlerArgs =
+  | { file_path: string; max_bytes?: number }
+  | { file_path: string; content: string; mode?: "replace" | "append" };
+
+type ToolHandler = (args: HandlerArgs) => Promise<string>;
+
+const toolHandlers: Record<string, ToolHandler> = {
+  read_file: async (rawArgs) => {
+    const args = rawArgs as { file_path: string; max_bytes?: number };
+    return readFileTool(args.file_path, args.max_bytes ?? DEFAULT_MAX_READ_BYTES);
+  },
+  prepare_file_download: async (rawArgs) => {
+    const args = rawArgs as { file_path: string; content: string; mode?: "replace" | "append" };
+    return prepareFileDownloadTool(args.file_path, args.content, args.mode);
+  },
+  prepare_download: async (rawArgs) => {
+    const args = rawArgs as { file_path: string };
+    return prepareDownloadTool(args.file_path);
+  },
+  write_file: async (rawArgs) => {
+    const args = rawArgs as { file_path: string; content: string; mode?: "replace" | "append" };
+    return writeFileTool(args.file_path, args.content, args.mode);
+  }
+};
+
+/**
+ * Ejecuta la herramienta llamada por el modelo y devuelve un mensaje "tool"
+ * listo para añadirse al historial de la conversación.
+ */
+export async function executeFileToolCall(
+  toolCall: ToolCall
+): Promise<OpenAI.Chat.Completions.ChatCompletionToolMessageParam> {
   const { name, arguments: argsJson } = toolCall.function;
+
+  const handler = toolHandlers[name];
   let content: string;
 
-  try {
-    if (name === "read_file") {
-      const args = JSON.parse(argsJson) as { file_path: string; max_bytes?: number };
-      content = await readFileTool(args.file_path, args.max_bytes ?? DEFAULT_MAX_READ_BYTES);
-    } else if (name === "prepare_file_download") {
-      const args = JSON.parse(argsJson) as { file_path: string; content: string; mode?: "replace" | "append" };
-      content = await prepareFileDownloadTool(args.file_path, args.content, args.mode);
-    } else if (name === "prepare_download") {
-      const args = JSON.parse(argsJson) as { file_path: string };
-      content = await prepareDownloadTool(args.file_path);
-    } else if (name === "write_file") {
-      const args = JSON.parse(argsJson) as { file_path: string; content: string; mode?: "replace" | "append" };
-      content = await writeFileTool(args.file_path, args.content, args.mode);
-    } else {
-      content = `Herramienta desconocida: ${name}`;
+  if (!handler) {
+    content = `Herramienta desconocida: ${name}`;
+  } else {
+    try {
+      const args = JSON.parse(argsJson) as HandlerArgs;
+      content = await handler(args);
+    } catch (error) {
+      content = `Error ejecutando ${name}: ${(error as Error).message}`;
     }
-  } catch (error) {
-    content = `Error ejecutando ${name}: ${(error as Error).message}`;
   }
 
   return {
@@ -130,7 +158,7 @@ export async function executeFileToolCall(toolCall: ToolCall): Promise<OpenAI.Ch
 }
 
 async function readFileTool(filePath: string, maxBytes: number): Promise<string> {
-  const resolved = path.resolve(process.cwd(), filePath);
+  const resolved = resolvePath(filePath);
   const data = await fs.readFile(resolved);
   if (data.length > maxBytes) {
     const slice = data.subarray(0, maxBytes).toString("utf8");
@@ -139,8 +167,12 @@ async function readFileTool(filePath: string, maxBytes: number): Promise<string>
   return data.toString("utf8");
 }
 
-async function writeFileTool(filePath: string, content: string, mode: "replace" | "append" = "replace"): Promise<string> {
-  const resolved = path.resolve(process.cwd(), filePath);
+async function writeFileTool(
+  filePath: string,
+  content: string,
+  mode: "replace" | "append" = "replace"
+): Promise<string> {
+  const resolved = resolvePath(filePath);
   if (mode === "append") {
     await fs.appendFile(resolved, content);
     return `Contenido añadido a ${resolved}`;
@@ -150,15 +182,20 @@ async function writeFileTool(filePath: string, content: string, mode: "replace" 
 }
 
 async function prepareDownloadTool(filePath: string): Promise<string> {
-  const resolved = path.resolve(process.cwd(), filePath);
+  const resolved = resolvePath(filePath);
   await fs.access(resolved);
   const token = await createDownloadToken(resolved);
   const href = `/api/download/${token}`;
-  return `Descarga lista: ${href}\n<a href="${href}" download="${path.basename(resolved)}">Descargar ${path.basename(resolved)}</a>`;
+  const filename = path.basename(resolved);
+  return `Descarga lista: ${href}\n<a href="${href}" download="${filename}">Descargar ${filename}</a>`;
 }
 
-async function prepareFileDownloadTool(filePath: string, content: string, mode: "replace" | "append" = "replace"): Promise<string> {
-  const resolved = path.resolve(process.cwd(), filePath);
+async function prepareFileDownloadTool(
+  filePath: string,
+  content: string,
+  mode: "replace" | "append" = "replace"
+): Promise<string> {
+  const resolved = resolvePath(filePath);
   if (mode === "append") {
     await fs.appendFile(resolved, content);
   } else {
@@ -168,4 +205,8 @@ async function prepareFileDownloadTool(filePath: string, content: string, mode: 
   const href = `/api/download/${token}`;
   const filename = path.basename(resolved);
   return `Archivo listo y guardado en ${resolved}\nDescarga: ${href}\n<a href="${href}" download="${filename}">Descargar ${filename}</a>`;
+}
+
+function resolvePath(p: string): string {
+  return path.resolve(process.cwd(), p);
 }
