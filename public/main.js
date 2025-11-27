@@ -94,6 +94,13 @@ function renderAssistantContent(container, text) {
         `<a href="${url}" target="_blank" rel="noopener noreferrer" download>Descargar archivo</a>`
     );
 
+  // Resaltar bloques <think> con estilo especial
+  const thinkRegex = /<think>([\s\S]*?)<\/think>/gi;
+  html = html.replace(thinkRegex, (_m, body) => {
+    const safe = escapeHtml(body.trim());
+    return `<div class="think-block"><div class="think-label">thinking</div><div class="think-body">${safe}</div></div>`;
+  });
+
   // If we can find a download URL (either absolute or relative), build a clean anchor
   const downloadUrlMatch = html.match(
     /(https?:\/\/[\w:\-\.\/]+\/api\/download\/[a-zA-Z0-9-]+|\/api\/download\/[a-zA-Z0-9-]+)/
@@ -121,6 +128,15 @@ function renderAssistantContent(container, text) {
   const temp = document.createElement("div");
   temp.innerHTML = html;
   container.innerHTML = temp.innerHTML.trim();
+}
+
+function escapeHtml(str) {
+  return str
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
 }
 
 // Allow pressing Enter to send the message (Shift+Enter for newline)

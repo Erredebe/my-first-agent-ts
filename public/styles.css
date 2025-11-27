@@ -133,6 +133,33 @@ h1 {
   box-shadow: 0 6px 14px rgba(9, 30, 55, 0.03);
 }
 
+.think-block {
+  margin-top: 10px;
+  padding: 12px;
+  border-radius: 10px;
+  background: #f0f4fb;
+  border: 1px dashed #c9d8ee;
+}
+
+.think-label {
+  display: inline-block;
+  padding: 4px 8px;
+  margin-bottom: 8px;
+  border-radius: 999px;
+  background: #e1e9f7;
+  color: #2b6cff;
+  font-size: 12px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.think-body {
+  color: #51617d;
+  white-space: pre-wrap;
+  line-height: 1.5;
+  font-size: 14px;
+}
+
 .input-bar {
   margin-top: 12px;
   display: flex;
