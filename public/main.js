@@ -6,9 +6,9 @@ const statusText = document.getElementById("status-text");
 
 let sessionId = localStorage.getItem("agent-session") || null;
 
-form.addEventListener("submit", async (e) => {
-  e.preventDefault();
-  const text = input.value.trim();
+// Extract sending logic to reuse from keyboard handlers
+async function sendFormMessage(rawText) {
+  const text = rawText.trim();
   if (!text) return;
 
   appendBubble(text, "user");
@@ -38,7 +38,19 @@ form.addEventListener("submit", async (e) => {
     appendBubble(`Error: ${err.message}`, "assistant");
   } finally {
     setLoading(false);
+    // After sending, keep the focus on the input and place cursor at the end
+    input.focus();
+    try {
+      input.selectionStart = input.selectionEnd = input.value.length;
+    } catch (e) {
+      /* ignore on older browsers */
+    }
   }
+}
+
+form.addEventListener("submit", async (e) => {
+  e.preventDefault();
+  await sendFormMessage(input.value);
 });
 
 function appendBubble(text, role) {
@@ -121,3 +133,31 @@ function renderAssistantContent(container, text) {
 
   container.innerHTML = temp.innerHTML.trim();
 }
+
+// Allow pressing Enter to send the message (Shift+Enter for newline)
+input.addEventListener("keydown", (e) => {
+  if (e.key === "Enter" && !e.shiftKey) {
+    e.preventDefault();
+    // Submit the form programmatically; this will trigger our submit handler
+    if (typeof form.requestSubmit === "function") {
+      form.requestSubmit();
+    } else {
+      // Fallback for older browsers
+      const evt = new Event("submit", { bubbles: true, cancelable: true });
+      form.dispatchEvent(evt);
+    }
+  }
+});
+
+// If Enter is pressed while the send button has focus, submit and return focus to input
+sendBtn.addEventListener("keydown", (e) => {
+  if (e.key === "Enter") {
+    e.preventDefault();
+    if (typeof form.requestSubmit === "function") form.requestSubmit();
+    else
+      form.dispatchEvent(
+        new Event("submit", { bubbles: true, cancelable: true })
+      );
+    input.focus();
+  }
+});
