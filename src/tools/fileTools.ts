@@ -1,11 +1,10 @@
 import fs from "fs/promises";
 import path from "path";
 import { OpenAI } from "openai";
-import { DEFAULT_MAX_READ_BYTES } from "./config.js";
+import { DEFAULT_MAX_READ_BYTES } from "../config/index.js";
+import { ToolCall } from "../core/types.js";
 
-export type ToolCall = OpenAI.Chat.Completions.ChatCompletionMessageToolCall;
-
-export const tools: OpenAI.Chat.Completions.ChatCompletionTool[] = [
+export const fileTools: OpenAI.Chat.Completions.ChatCompletionTool[] = [
   {
     type: "function",
     function: {
@@ -55,7 +54,7 @@ export const tools: OpenAI.Chat.Completions.ChatCompletionTool[] = [
   }
 ];
 
-export async function executeToolCall(toolCall: ToolCall): Promise<OpenAI.Chat.Completions.ChatCompletionToolMessageParam> {
+export async function executeFileToolCall(toolCall: ToolCall): Promise<OpenAI.Chat.Completions.ChatCompletionToolMessageParam> {
   const { name, arguments: argsJson } = toolCall.function;
   let content: string;
 

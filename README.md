@@ -3,10 +3,10 @@
 CLI en TypeScript para chatear con un servidor OpenAI-compatible (ej. `lm-studio`, `llama.cpp` HTTP) usando el modelo `openai/gpt-oss-20b` en `http://127.0.0.1:1234/v1`.
 
 Estructura:
-- `src/config.ts` : configuración base (modelo, URL, prompts).
-- `src/tools.ts` : herramientas locales (leer/escribir archivos).
-- `src/chat.ts` : orquestación del agente y llamadas a la API.
-- `src/index.ts` : CLI (readline) y comandos de usuario.
+- `src/config/` : configuración base (modelo, URL, prompts).
+- `src/core/` : lógica del agente y tipos (`chatAgent.ts`, `types.ts`).
+- `src/tools/` : herramientas locales (`fileTools.ts`).
+- `src/cli/` : entrada de consola (`index.ts`).
 
 ## Prerrequisitos
 - Node.js 18+ y npm
@@ -41,5 +41,5 @@ npm start
 - `npm run build` : compila a `dist/` con `tsc`.
 
 ## Notas
-- Cambia modelo/URL/prompt en `src/config.ts` o vía variables de entorno.
+- Cambia modelo/URL/prompt en `src/config/index.ts` o vía variables de entorno.
 - El streaming se muestra en tiempo real en la consola.

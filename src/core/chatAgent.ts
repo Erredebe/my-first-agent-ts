@@ -1,9 +1,8 @@
 import chalk from "chalk";
 import { OpenAI } from "openai";
-import { API_KEY, BASE_URL, MODEL, SYSTEM_PROMPT } from "./config.js";
-import { executeToolCall, tools, ToolCall } from "./tools.js";
-
-type MessageParam = OpenAI.Chat.Completions.ChatCompletionMessageParam;
+import { API_KEY, BASE_URL, MODEL, SYSTEM_PROMPT } from "../config/index.js";
+import { fileTools, executeFileToolCall } from "../tools/fileTools.js";
+import { MessageParam, ToolCall } from "./types.js";
 
 export class ChatAgent {
   private client = new OpenAI({ apiKey: API_KEY, baseURL: BASE_URL });
@@ -30,7 +29,7 @@ export class ChatAgent {
       });
 
       for (const call of firstMessage.tool_calls) {
-        const toolResult = await executeToolCall(call as ToolCall);
+        const toolResult = await executeFileToolCall(call as ToolCall);
         this.conversation.push(toolResult);
       }
 
@@ -57,7 +56,7 @@ export class ChatAgent {
     return this.client.chat.completions.create({
       model: MODEL,
       messages,
-      tools: allowTools ? tools : undefined,
+      tools: allowTools ? fileTools : undefined,
       tool_choice: allowTools ? "auto" : undefined
     });
   }
