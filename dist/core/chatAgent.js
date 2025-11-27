@@ -19,15 +19,25 @@ export class ChatAgent {
                 content: firstMessage.content ?? null,
                 tool_calls: firstMessage.tool_calls
             });
+            const toolOutputs = [];
             for (const call of firstMessage.tool_calls) {
                 const toolResult = await executeFileToolCall(call);
+                if (typeof toolResult.content === "string") {
+                    toolOutputs.push(toolResult.content);
+                }
                 this.conversation.push(toolResult);
             }
             const second = await this.createCompletion(this.conversation, false);
             const finalMessage = second.choices[0]?.message;
             if (finalMessage?.content) {
-                this.conversation.push({ role: "assistant", content: finalMessage.content });
-                return finalMessage.content;
+                const reply = appendToolFallback(finalMessage.content, toolOutputs);
+                this.conversation.push({ role: "assistant", content: reply });
+                return reply;
+            }
+            if (toolOutputs.length) {
+                const fallback = toolOutputs.join("\n\n");
+                this.conversation.push({ role: "assistant", content: fallback });
+                return fallback;
             }
             return null;
         }
@@ -48,4 +58,12 @@ export class ChatAgent {
             tool_choice: allowTools ? "auto" : undefined
         });
     }
+}
+function appendToolFallback(finalContent, toolOutputs) {
+    if (!toolOutputs.length)
+        return finalContent;
+    const hasDownload = /\/api\/download\//.test(finalContent) || /<a\s/i.test(finalContent);
+    if (hasDownload)
+        return finalContent;
+    return `${finalContent}\n\n${toolOutputs.join("\n\n")}`;
 }

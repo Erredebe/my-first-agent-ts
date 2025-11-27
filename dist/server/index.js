@@ -3,6 +3,7 @@ import path from "path";
 import { randomUUID } from "crypto";
 import { fileURLToPath } from "url";
 import { ChatAgent } from "../core/chatAgent.js";
+import { getDownloadPath } from "./downloads.js";
 const app = express();
 app.use(express.json());
 const __filename = fileURLToPath(import.meta.url);
@@ -32,6 +33,14 @@ app.post("/api/chat", async (req, res) => {
     catch (err) {
         res.status(500).json({ error: err.message });
     }
+});
+app.get("/api/download/:token", async (req, res) => {
+    const { token } = req.params;
+    const filePath = token ? getDownloadPath(token) : undefined;
+    if (!filePath) {
+        return res.status(404).send("Enlace no válido o caducado");
+    }
+    return res.download(filePath, path.basename(filePath));
 });
 const port = process.env.PORT ? Number(process.env.PORT) : 3000;
 app.listen(port, () => {

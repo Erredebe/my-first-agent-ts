@@ -44,7 +44,11 @@ form.addEventListener("submit", async (e) => {
 function appendBubble(text, role) {
   const div = document.createElement("div");
   div.className = `bubble ${role}`;
-  div.textContent = text;
+  if (role === "assistant") {
+    renderAssistantContent(div, text);
+  } else {
+    div.textContent = text;
+  }
   messages.appendChild(div);
   messages.scrollTop = messages.scrollHeight;
 }
@@ -52,4 +56,14 @@ function appendBubble(text, role) {
 function setLoading(isLoading) {
   sendBtn.disabled = isLoading;
   statusText.textContent = isLoading ? "Pensando..." : "Listo";
+}
+
+function renderAssistantContent(container, text) {
+  const mdLink = /\[([^\]]+)\]\((https?:\/\/[^\s)]+|\/api\/download\/[^\s)]+)\)/g;
+  const downloadPath = /(https?:\/\/[^\s]+\/api\/download\/[a-zA-Z0-9-]+|\/api\/download\/[a-zA-Z0-9-]+)/g;
+  let html = text
+    .replace(mdLink, (_m, label, url) => `<a href="${url}" target="_blank" rel="noopener noreferrer" download>${label}</a>`)
+    .replace(downloadPath, (url) => `<a href="${url}" target="_blank" rel="noopener noreferrer" download>Descargar archivo</a>`);
+
+  container.innerHTML = html;
 }
