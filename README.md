@@ -50,6 +50,7 @@ npm start
 npm run start:web
 ```
 - Abre `http://localhost:3000` y chatea desde el navegador (la sesión se conserva en `localStorage`).
+- El selector superior se llena con `/api/models` (proxy de `/v1/models` del backend configurado) y reinicia el contexto al cambiar de modelo.
 
 ## Scripts útiles
 - `npm start` : ejecuta el agente con `tsx` (sin build previo).

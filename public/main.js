@@ -3,17 +3,141 @@ const DOM = {
   input: document.getElementById("message-input"),
   messages: document.getElementById("messages"),
   sendBtn: document.getElementById("send-btn"),
-  statusText: document.getElementById("status-text")
+  statusText: document.getElementById("status-text"),
+  modelSelect: document.getElementById("model-select"),
+  refreshModelsBtn: document.getElementById("refresh-models"),
+  modelStatus: document.getElementById("model-status")
 };
 
 const state = {
   sessionId: localStorage.getItem("agent-session") ?? null,
-  isThinking: false
+  isThinking: false,
+  model: localStorage.getItem("agent-model") ?? null,
+  models: [],
+  defaultModel: null
 };
 
 DOM.form.addEventListener("submit", handleSubmit);
 DOM.input.addEventListener("keydown", handleInputKeydown);
 DOM.sendBtn.addEventListener("keydown", handleSendKeydown);
+DOM.modelSelect?.addEventListener("change", handleModelChange);
+DOM.refreshModelsBtn?.addEventListener("click", () => loadModels());
+
+loadModels().catch(() => {
+  setModelStatus("No se pudieron cargar los modelos", true);
+});
+
+async function loadModels() {
+  if (!DOM.modelSelect) return;
+
+  setModelStatus("Cargando modelos...");
+  toggleModelControls(true);
+
+  try {
+    const response = await fetch(`${window.API_URL}/api/models`);
+    if (!response.ok) {
+      throw new Error("No se pudieron cargar los modelos");
+    }
+
+    const payload = await response.json();
+    const ids = Array.isArray(payload.models)
+      ? payload.models
+          .map((m) => (typeof m === "string" ? m : m?.id))
+          .filter(Boolean)
+      : [];
+
+    state.defaultModel =
+      typeof payload.defaultModel === "string" ? payload.defaultModel : null;
+    state.models = ids;
+
+    renderModelOptions(ids);
+
+    const candidate =
+      state.model && ids.includes(state.model) ? state.model : null;
+    const fallback =
+      state.defaultModel && ids.includes(state.defaultModel)
+        ? state.defaultModel
+        : ids[0] ?? state.defaultModel ?? null;
+    const pick = candidate || fallback;
+
+    if (pick) {
+      setActiveModel(pick, false);
+    } else {
+      setModelStatus("No se encontraron modelos", true);
+    }
+  } catch (error) {
+    setModelStatus(
+      error instanceof Error ? error.message : "Error al obtener modelos",
+      true
+    );
+  } finally {
+    toggleModelControls(false);
+  }
+}
+
+function renderModelOptions(list) {
+  if (!DOM.modelSelect) return;
+  DOM.modelSelect.innerHTML = "";
+
+  if (!list.length) {
+    const opt = document.createElement("option");
+    opt.value = "";
+    opt.textContent = "Sin modelos";
+    DOM.modelSelect.appendChild(opt);
+    DOM.modelSelect.disabled = true;
+    return;
+  }
+
+  list.forEach((id) => {
+    const opt = document.createElement("option");
+    opt.value = id;
+    opt.textContent = id;
+    DOM.modelSelect.appendChild(opt);
+  });
+
+  DOM.modelSelect.disabled = false;
+}
+
+function setActiveModel(modelId, announceChange = false) {
+  state.model = modelId;
+  localStorage.setItem("agent-model", modelId);
+
+  if (DOM.modelSelect && DOM.modelSelect.value !== modelId) {
+    DOM.modelSelect.value = modelId;
+  }
+
+  setModelStatus(`Modelo activo: ${modelId}`);
+
+  if (announceChange) {
+    state.sessionId = null;
+    localStorage.removeItem("agent-session");
+    appendBubble(
+      `Modelo cambiado a ${modelId}. Se reinicia el contexto.`,
+      "assistant"
+    );
+  }
+}
+
+function handleModelChange(event) {
+  const value = event.target.value;
+  if (!value || value === state.model) return;
+  setActiveModel(value, true);
+}
+
+function toggleModelControls(isLoading) {
+  if (DOM.modelSelect) {
+    DOM.modelSelect.disabled = isLoading || !state.models.length;
+  }
+  if (DOM.refreshModelsBtn) {
+    DOM.refreshModelsBtn.disabled = isLoading;
+  }
+}
+
+function setModelStatus(text, isError = false) {
+  if (!DOM.modelStatus) return;
+  DOM.modelStatus.textContent = text;
+  DOM.modelStatus.classList.toggle("error", Boolean(isError));
+}
 
 async function handleSubmit(event) {
   event.preventDefault();
@@ -72,7 +196,11 @@ async function sendMessage(message) {
   const response = await fetch(`${window.API_URL}/api/chat`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ message, sessionId: state.sessionId })
+    body: JSON.stringify({
+      message,
+      sessionId: state.sessionId,
+      model: state.model
+    })
   });
 
   if (!response.ok) {

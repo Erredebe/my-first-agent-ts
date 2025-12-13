@@ -30,6 +30,19 @@
         </div>
       </header>
 
+      <section class="toolbar">
+        <div class="toolbar-left">
+          <div class="toolbar-head">
+            <label for="model-select">Modelo</label>
+            <button type="button" id="refresh-models" class="ghost-btn">Refrescar</button>
+          </div>
+          <div class="model-row">
+            <select id="model-select" aria-label="Seleccionar modelo"></select>
+            <span id="model-status" class="helper muted">Cargando modelos...</span>
+          </div>
+        </div>
+      </section>
+
       <main class="panel">
         <div id="messages" class="messages"></div>
 

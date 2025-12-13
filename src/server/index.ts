@@ -4,6 +4,7 @@ import path from "path";
 import { randomUUID } from "crypto";
 import { exec } from "child_process";
 import { fileURLToPath } from "url";
+import { OpenAI } from "openai";
 import { ChatAgent } from "../core/chatAgent.js";
 import { getDownloadPath } from "./downloads.js";
 import { getConfig } from "../config/index.js";
@@ -29,19 +30,25 @@ const __dirname = path.dirname(__filename);
 const publicDir = path.resolve(__dirname, "../../public");
 
 // Cada pestaña del navegador conserva su sesión de conversación.
-const agents = new Map<string, { agent: ChatAgent; lastActive: number }>();
+const agents = new Map<
+  string,
+  { agent: ChatAgent; lastActive: number; model: string }
+>();
 const SESSION_TIMEOUT_MS = 60 * 60 * 1000; // 1 hora
 
-function getAgent(sessionId: string): ChatAgent {
+function getAgent(sessionId: string, modelOverride?: string): ChatAgent {
+  const baseConfig = getConfig();
+  const model = modelOverride?.trim() || baseConfig.model;
+
   const existing = agents.get(sessionId);
-  if (existing) {
+  if (existing && existing.model === model) {
     existing.lastActive = Date.now();
     return existing.agent;
   }
-  
-  const config = getConfig();
+
+  const config = { ...baseConfig, model };
   const agent = new ChatAgent(config);
-  agents.set(sessionId, { agent, lastActive: Date.now() });
+  agents.set(sessionId, { agent, lastActive: Date.now(), model });
   return agent;
 }
 
@@ -58,10 +65,31 @@ setInterval(() => {
 
 app.use(express.static(publicDir));
 
+app.get("/api/models", async (_req: Request, res: Response) => {
+  const config = getConfig();
+  const client = new OpenAI({ apiKey: config.apiKey, baseURL: config.baseURL });
+
+  try {
+    const models = await client.models.list();
+    const list =
+      models.data?.map((m) => ({
+        id: m.id,
+        created: m.created,
+        owned_by: (m as { owned_by?: string }).owned_by ?? "unknown"
+      })) ?? [];
+
+    res.json({ models: list, defaultModel: config.model });
+  } catch (error) {
+    Logger.error("Error in /api/models", error, "Server");
+    res.status(500).json({ error: "No se pudieron obtener los modelos" });
+  }
+});
+
 app.post("/api/chat", async (req: Request, res: Response) => {
-  const { message, sessionId } = req.body as {
+  const { message, sessionId, model } = req.body as {
     message?: string;
     sessionId?: string;
+    model?: string;
   };
 
   if (!message || typeof message !== "string" || !message.trim()) {
@@ -70,7 +98,7 @@ app.post("/api/chat", async (req: Request, res: Response) => {
 
   const sid =
     sessionId && typeof sessionId === "string" ? sessionId : randomUUID();
-  const agent = getAgent(sid);
+  const agent = getAgent(sid, model);
 
   try {
     const reply = await agent.sendMessage(message);
