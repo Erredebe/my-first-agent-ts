@@ -135,9 +135,11 @@ function handleModelChange(event) {
 function toggleModelControls(isLoading) {
   if (DOM.modelSelect) {
     DOM.modelSelect.disabled = isLoading || !state.models.length;
+    DOM.modelSelect.setAttribute("aria-busy", String(isLoading));
   }
   if (DOM.refreshModelsBtn) {
     DOM.refreshModelsBtn.disabled = isLoading;
+    DOM.refreshModelsBtn.setAttribute("aria-busy", String(isLoading));
   }
 }
 
@@ -225,9 +227,11 @@ function setPromptStatus(text, isError = false) {
 function togglePromptControls(isLoading) {
   if (DOM.systemPromptInput) {
     DOM.systemPromptInput.disabled = isLoading;
+    DOM.systemPromptInput.setAttribute("aria-busy", String(isLoading));
   }
   if (DOM.saveSystemPromptBtn) {
     DOM.saveSystemPromptBtn.disabled = isLoading;
+    DOM.saveSystemPromptBtn.setAttribute("aria-busy", String(isLoading));
   }
 }
 
@@ -333,6 +337,7 @@ function appendBubble(text, role) {
 function setThinking(value) {
   state.isThinking = Boolean(value);
   DOM.sendBtn.disabled = state.isThinking;
+  DOM.form.setAttribute("aria-busy", String(state.isThinking));
   DOM.statusText.textContent = state.isThinking ? "Pensando..." : "Listo";
 
   if (state.isThinking) {
