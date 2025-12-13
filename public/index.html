@@ -41,6 +41,19 @@
             <span id="model-status" class="helper muted">Cargando modelos...</span>
           </div>
         </div>
+        <div class="toolbar-right">
+          <div class="toolbar-head">
+            <label for="system-prompt">System prompt</label>
+            <button type="button" id="save-system-prompt" class="ghost-btn">Guardar</button>
+          </div>
+          <textarea
+            id="system-prompt"
+            class="prompt-input"
+            rows="3"
+            placeholder="Define el comportamiento base del asistente"
+          ></textarea>
+          <span id="prompt-status" class="helper muted">Cargando system prompt...</span>
+        </div>
       </section>
 
       <main class="panel">

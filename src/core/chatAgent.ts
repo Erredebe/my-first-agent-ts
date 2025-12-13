@@ -53,11 +53,16 @@ export class ChatAgent {
   /**
    * Borra el contexto manteniendo el prompt del sistema.
    */
-  /**
-   * Borra el contexto manteniendo el prompt del sistema.
-   */
   resetContext(): void {
     this.conversation = [{ role: "system", content: this.config.systemPrompt }];
+  }
+
+  /**
+   * Actualiza el system prompt y reinicia el contexto.
+   */
+  setSystemPrompt(systemPrompt: string): void {
+    this.config.systemPrompt = systemPrompt;
+    this.resetContext();
   }
 
   /**

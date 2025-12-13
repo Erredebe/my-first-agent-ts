@@ -6,7 +6,10 @@ const DOM = {
   statusText: document.getElementById("status-text"),
   modelSelect: document.getElementById("model-select"),
   refreshModelsBtn: document.getElementById("refresh-models"),
-  modelStatus: document.getElementById("model-status")
+  modelStatus: document.getElementById("model-status"),
+  systemPromptInput: document.getElementById("system-prompt"),
+  saveSystemPromptBtn: document.getElementById("save-system-prompt"),
+  promptStatus: document.getElementById("prompt-status"),
 };
 
 const state = {
@@ -14,7 +17,8 @@ const state = {
   isThinking: false,
   model: localStorage.getItem("agent-model") ?? null,
   models: [],
-  defaultModel: null
+  defaultModel: null,
+  systemPrompt: "",
 };
 
 DOM.form.addEventListener("submit", handleSubmit);
@@ -22,9 +26,13 @@ DOM.input.addEventListener("keydown", handleInputKeydown);
 DOM.sendBtn.addEventListener("keydown", handleSendKeydown);
 DOM.modelSelect?.addEventListener("change", handleModelChange);
 DOM.refreshModelsBtn?.addEventListener("click", () => loadModels());
+DOM.saveSystemPromptBtn?.addEventListener("click", handleSystemPromptSave);
 
 loadModels().catch(() => {
   setModelStatus("No se pudieron cargar los modelos", true);
+});
+loadSystemPrompt().catch(() => {
+  setPromptStatus("No se pudo cargar el system prompt", true);
 });
 
 async function loadModels() {
@@ -139,6 +147,90 @@ function setModelStatus(text, isError = false) {
   DOM.modelStatus.classList.toggle("error", Boolean(isError));
 }
 
+async function loadSystemPrompt() {
+  if (!DOM.systemPromptInput) return;
+  setPromptStatus("Cargando system prompt...");
+  togglePromptControls(true);
+
+  try {
+    const response = await fetch(`${window.API_URL}/api/system-prompt`);
+    if (!response.ok) {
+      throw new Error("No se pudo obtener el system prompt");
+    }
+
+    const payload = await response.json();
+    const prompt =
+      typeof payload.systemPrompt === "string" ? payload.systemPrompt : "";
+
+    state.systemPrompt = prompt;
+    DOM.systemPromptInput.value = prompt;
+    setPromptStatus("System prompt listo");
+  } catch (error) {
+    setPromptStatus(
+      error instanceof Error ? error.message : "Error al obtener system prompt",
+      true
+    );
+  } finally {
+    togglePromptControls(false);
+  }
+}
+
+async function handleSystemPromptSave() {
+  if (!DOM.systemPromptInput) return;
+  const value = DOM.systemPromptInput.value.trim();
+  if (!value) {
+    setPromptStatus("El system prompt no puede estar vac��o", true);
+    return;
+  }
+
+  togglePromptControls(true);
+  setPromptStatus("Guardando...");
+
+  try {
+    const response = await fetch(`${window.API_URL}/api/system-prompt`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ systemPrompt: value }),
+    });
+
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error(err.error || "No se pudo guardar");
+    }
+
+    state.systemPrompt = value;
+    state.sessionId = null;
+    localStorage.removeItem("agent-session");
+    setPromptStatus("System prompt actualizado. Se reinició el contexto.");
+    appendBubble(
+      "System prompt actualizado. Se reinicia la conversación.",
+      "assistant"
+    );
+  } catch (error) {
+    setPromptStatus(
+      error instanceof Error ? error.message : "Error al guardar",
+      true
+    );
+  } finally {
+    togglePromptControls(false);
+  }
+}
+
+function setPromptStatus(text, isError = false) {
+  if (!DOM.promptStatus) return;
+  DOM.promptStatus.textContent = text;
+  DOM.promptStatus.classList.toggle("error", Boolean(isError));
+}
+
+function togglePromptControls(isLoading) {
+  if (DOM.systemPromptInput) {
+    DOM.systemPromptInput.disabled = isLoading;
+  }
+  if (DOM.saveSystemPromptBtn) {
+    DOM.saveSystemPromptBtn.disabled = isLoading;
+  }
+}
+
 async function handleSubmit(event) {
   event.preventDefault();
   if (state.isThinking) return; // bloquear envíos mientras el modelo procesa
@@ -188,7 +280,9 @@ function submitForm() {
   if (typeof DOM.form.requestSubmit === "function") {
     DOM.form.requestSubmit();
   } else {
-    DOM.form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+    DOM.form.dispatchEvent(
+      new Event("submit", { bubbles: true, cancelable: true })
+    );
   }
 }
 
@@ -199,8 +293,8 @@ async function sendMessage(message) {
     body: JSON.stringify({
       message,
       sessionId: state.sessionId,
-      model: state.model
-    })
+      model: state.model,
+    }),
   });
 
   if (!response.ok) {
@@ -281,19 +375,25 @@ function removeThinkingBubble() {
 function renderAssistantContent(container, text) {
   // 1. Extraer bloques ```html ... ``` para que no los toque marked
   const htmlBlocks = [];
-  let processedText = text.replace(/```html\n([\s\S]*?)\n```/g, (match, inner) => {
-    htmlBlocks.push(inner);
-    return `__HTML_BLOCK_${htmlBlocks.length - 1}__`;
-  });
+  let processedText = text.replace(
+    /```html\n([\s\S]*?)\n```/g,
+    (match, inner) => {
+      htmlBlocks.push(inner);
+      return `__HTML_BLOCK_${htmlBlocks.length - 1}__`;
+    }
+  );
 
   // 2. Extraer bloques <think> ... </think> para que no los toque marked (o procesarlos antes)
   //    Preferimos procesarlos antes para que el contenido dentro de think también pueda tener markdown si se quiere,
   //    pero por simplicidad y para evitar conflictos, los extraemos y luego los restauramos.
   const thinkBlocks = [];
-  processedText = processedText.replace(/<think>([\s\S]*?)<\/think>/gi, (match, body) => {
-    thinkBlocks.push(body);
-    return `__THINK_BLOCK_${thinkBlocks.length - 1}__`;
-  });
+  processedText = processedText.replace(
+    /<think>([\s\S]*?)<\/think>/gi,
+    (match, body) => {
+      thinkBlocks.push(body);
+      return `__THINK_BLOCK_${thinkBlocks.length - 1}__`;
+    }
+  );
 
   // 3. Renderizar Markdown con marked
   let html = marked.parse(processedText);
@@ -319,20 +419,20 @@ function renderAssistantContent(container, text) {
   //    Marked ya convierte [label](url) en <a href="url">label</a>.
   //    Solo necesitamos asegurar que los enlaces de descarga tengan el atributo download si apuntan a /api/download
   //    o forzar target="_blank" en todos los enlaces.
-  
+
   // Usamos un contenedor temporal para manipular el DOM resultante
   const temp = document.createElement("div");
   temp.innerHTML = html;
 
   // Post-procesamiento de enlaces
   const links = temp.querySelectorAll("a");
-  links.forEach(a => {
+  links.forEach((a) => {
     a.target = "_blank";
     a.rel = "noopener noreferrer";
     if (a.href.includes("/api/download/")) {
       a.download = ""; // Activar descarga
       if (a.textContent === a.href) {
-         a.textContent = "Descargar archivo";
+        a.textContent = "Descargar archivo";
       }
     }
   });

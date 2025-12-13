@@ -28,6 +28,7 @@ app.use(express.json());
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const publicDir = path.resolve(__dirname, "../../public");
+let currentSystemPrompt = getConfig().systemPrompt;
 
 // Cada pestaña del navegador conserva su sesión de conversación.
 const agents = new Map<
@@ -39,6 +40,7 @@ const SESSION_TIMEOUT_MS = 60 * 60 * 1000; // 1 hora
 function getAgent(sessionId: string, modelOverride?: string): ChatAgent {
   const baseConfig = getConfig();
   const model = modelOverride?.trim() || baseConfig.model;
+  const systemPrompt = currentSystemPrompt;
 
   const existing = agents.get(sessionId);
   if (existing && existing.model === model) {
@@ -46,7 +48,7 @@ function getAgent(sessionId: string, modelOverride?: string): ChatAgent {
     return existing.agent;
   }
 
-  const config = { ...baseConfig, model };
+  const config = { ...baseConfig, model, systemPrompt };
   const agent = new ChatAgent(config);
   agents.set(sessionId, { agent, lastActive: Date.now(), model });
   return agent;
@@ -83,6 +85,24 @@ app.get("/api/models", async (_req: Request, res: Response) => {
     Logger.error("Error in /api/models", error, "Server");
     res.status(500).json({ error: "No se pudieron obtener los modelos" });
   }
+});
+
+app.get("/api/system-prompt", (_req: Request, res: Response) => {
+  res.json({ systemPrompt: currentSystemPrompt });
+});
+
+app.post("/api/system-prompt", (req: Request, res: Response) => {
+  const { systemPrompt } = req.body as { systemPrompt?: string };
+  if (!systemPrompt || typeof systemPrompt !== "string" || !systemPrompt.trim()) {
+    return res.status(400).json({ error: "El system prompt es obligatorio" });
+  }
+
+  currentSystemPrompt = systemPrompt.trim();
+  for (const session of agents.values()) {
+    session.agent.setSystemPrompt(currentSystemPrompt);
+  }
+
+  res.json({ systemPrompt: currentSystemPrompt });
 });
 
 app.post("/api/chat", async (req: Request, res: Response) => {

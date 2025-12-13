@@ -7,10 +7,12 @@ import { app } from "./index.js";
 import { createDownloadToken } from "./downloads.js";
 
 const sendMessageMock = vi.fn();
+const setSystemPromptMock = vi.fn();
 
 vi.mock("../core/chatAgent.js", () => ({
   ChatAgent: class {
     sendMessage = sendMessageMock;
+    setSystemPrompt = setSystemPromptMock;
   }
 }));
 
@@ -21,6 +23,7 @@ vi.mock("child_process", () => ({
 describe("server routes", () => {
   beforeEach(() => {
     sendMessageMock.mockReset();
+    setSystemPromptMock.mockReset();
   });
 
   it("rechaza peticiones sin mensaje", async () => {
@@ -37,6 +40,26 @@ describe("server routes", () => {
     expect(res.status).toBe(200);
     expect(res.body.reply).toBe("respuesta");
     expect(res.body.sessionId).toBeTruthy();
+  });
+
+  it("expone y actualiza el system prompt", async () => {
+    const initial = await request(app).get("/api/system-prompt");
+    expect(initial.status).toBe(200);
+    expect(typeof initial.body.systemPrompt).toBe("string");
+
+    sendMessageMock.mockResolvedValueOnce("ok");
+    await request(app).post("/api/chat").send({ message: "hola" });
+
+    const res = await request(app)
+      .post("/api/system-prompt")
+      .send({ systemPrompt: "nuevo prompt" });
+
+    expect(res.status).toBe(200);
+    expect(res.body.systemPrompt).toBe("nuevo prompt");
+    expect(setSystemPromptMock).toHaveBeenCalledWith("nuevo prompt");
+
+    const after = await request(app).get("/api/system-prompt");
+    expect(after.body.systemPrompt).toBe("nuevo prompt");
   });
 
   it("devuelve 404 para tokens de descarga inválidos", async () => {
