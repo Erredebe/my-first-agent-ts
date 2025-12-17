@@ -172,7 +172,11 @@ async function main() {
       continue;
     }
 
+    rl.pause();
+    process.stdout.write(chalk.gray("Pensando..."));
     const reply = await agent.sendMessage(input);
+    process.stdout.write("\r\x1b[K");
+    rl.resume();
     if (reply) {
       process.stdout.write(chalk.blue("agente > ") + reply + "\n");
     } else {
