@@ -6,7 +6,7 @@
 export type BackendType = "lm-studio" | "ollama";
 
 const DEFAULT_MODEL = "openai/gpt-oss-20b";
-const DEFAULT_BASE_URL = "http://127.0.0.1:1234";
+const DEFAULT_BASE_URL = "http://127.0.0.1:1234/v1";
 const DEFAULT_SYSTEM_PROMPT = "Eres un asistente útil y conciso.";
 const DEFAULT_API_KEY = "not-needed";
 

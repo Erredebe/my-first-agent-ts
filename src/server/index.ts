@@ -96,6 +96,10 @@ async function detectBackend(baseURL: string): Promise<BackendType | null> {
       const body = await resp.json();
       if (body.data || body.models || Array.isArray(body)) {
         setBackendType("lm-studio");
+        // Ensure baseURL includes /v1 for LM Studio
+        if (!normalized.includes("/v1")) {
+          setBaseURL(normalized + "/v1");
+        }
         return "lm-studio";
       }
     }
@@ -115,6 +119,8 @@ async function detectBackend(baseURL: string): Promise<BackendType | null> {
       const body = await resp.json();
       if (body.models && Array.isArray(body.models)) {
         setBackendType("ollama");
+        // Set Ollama's OpenAI-compatible endpoint
+        setBaseURL(`http://${host}:11434/v1`);
         return "ollama";
       }
     }

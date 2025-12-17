@@ -4,12 +4,15 @@ const DOM = {
   messages: document.getElementById("messages"),
   sendBtn: document.getElementById("send-btn"),
   statusText: document.getElementById("status-text"),
+  statusIndicator: document.querySelector(".status"),
   modelSelect: document.getElementById("model-select"),
   refreshModelsBtn: document.getElementById("refresh-models"),
   modelStatus: document.getElementById("model-status"),
   systemPromptInput: document.getElementById("system-prompt"),
   saveSystemPromptBtn: document.getElementById("save-system-prompt"),
   promptStatus: document.getElementById("prompt-status"),
+  toolbar: document.querySelector(".toolbar"),
+  toolbarToggle: document.getElementById("toolbar-toggle"),
 };
 
 const state = {
@@ -19,6 +22,8 @@ const state = {
   models: [],
   defaultModel: null,
   systemPrompt: "",
+  isConnected: false,
+  toolbarCollapsed: localStorage.getItem("toolbar-collapsed") === "true",
 };
 
 DOM.form.addEventListener("submit", handleSubmit);
@@ -27,6 +32,12 @@ DOM.sendBtn.addEventListener("keydown", handleSendKeydown);
 DOM.modelSelect?.addEventListener("change", handleModelChange);
 DOM.refreshModelsBtn?.addEventListener("click", () => loadModels());
 DOM.saveSystemPromptBtn?.addEventListener("click", handleSystemPromptSave);
+DOM.toolbarToggle?.addEventListener("click", toggleToolbar);
+
+// Initialize toolbar state
+initializeToolbar();
+// Initialize connection status as disconnected
+updateConnectionStatus(false);
 
 loadModels().catch(() => {
   setModelStatus("No se pudieron cargar los modelos", true);
@@ -66,24 +77,33 @@ async function loadModels() {
 
     renderModelOptions(ids);
 
+    // Only select a model if we actually have models available
     const candidate =
       state.model && ids.includes(state.model) ? state.model : null;
     const fallback =
       state.defaultModel && ids.includes(state.defaultModel)
         ? state.defaultModel
-        : ids[0] ?? state.defaultModel ?? null;
+        : ids[0] ?? null;  // Don't fall back to defaultModel if it's not in the list
     const pick = candidate || fallback;
 
     if (pick) {
       setActiveModel(pick, false);
+      updateConnectionStatus(true);
     } else {
-      setModelStatus("No se encontraron modelos", true);
+      // No models available - either empty array or no valid model
+      if (ids.length === 0) {
+        setModelStatus("No hay modelos disponibles. Verifica que LM Studio u Ollama estén corriendo.", true);
+      } else {
+        setModelStatus("No se encontraron modelos", true);
+      }
+      updateConnectionStatus(false);
     }
   } catch (error) {
     setModelStatus(
       error instanceof Error ? error.message : "Error al obtener modelos",
       true
     );
+    updateConnectionStatus(false);
   } finally {
     toggleModelControls(false);
   }
@@ -344,11 +364,12 @@ function setThinking(value) {
   state.isThinking = Boolean(value);
   DOM.sendBtn.disabled = state.isThinking;
   DOM.form.setAttribute("aria-busy", String(state.isThinking));
-  DOM.statusText.textContent = state.isThinking ? "Pensando..." : "Listo";
-
+  
   if (state.isThinking) {
+    DOM.statusText.textContent = "Pensando...";
     showThinkingBubble();
   } else {
+    DOM.statusText.textContent = state.isConnected ? "Listo" : "Desconectado";
     removeThinkingBubble();
   }
 }
@@ -471,4 +492,41 @@ function focusInputEnd() {
 
 function scrollMessagesToEnd() {
   DOM.messages.scrollTop = DOM.messages.scrollHeight;
+}
+
+function updateConnectionStatus(isConnected) {
+  state.isConnected = isConnected;
+  
+  if (DOM.statusIndicator) {
+    DOM.statusIndicator.classList.toggle("connected", isConnected);
+    DOM.statusIndicator.classList.toggle("disconnected", !isConnected);
+  }
+  
+  if (DOM.statusText && !state.isThinking) {
+    DOM.statusText.textContent = isConnected ? "Listo" : "Desconectado";
+  }
+}
+
+function initializeToolbar() {
+  if (!DOM.toolbar || !DOM.toolbarToggle) return;
+  
+  // Apply saved state
+  if (state.toolbarCollapsed) {
+    DOM.toolbar.setAttribute("data-collapsed", "true");
+    DOM.toolbarToggle.setAttribute("aria-expanded", "false");
+  }
+}
+
+function toggleToolbar() {
+  if (!DOM.toolbar || !DOM.toolbarToggle) return;
+  
+  const isCollapsed = DOM.toolbar.getAttribute("data-collapsed") === "true";
+  const newState = !isCollapsed;
+  
+  DOM.toolbar.setAttribute("data-collapsed", String(newState));
+  DOM.toolbarToggle.setAttribute("aria-expanded", String(!newState));
+  
+  // Save state
+  state.toolbarCollapsed = newState;
+  localStorage.setItem("toolbar-collapsed", String(newState));
 }

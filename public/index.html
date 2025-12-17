@@ -25,13 +25,21 @@
             Habla con el modelo en tu máquina. Mantén la pestaña abierta para conservar el contexto.
           </p>
         </div>
-        <div class="status">
-          <span class="dot"></span>
-          <span id="status-text">Listo</span>
+        <div class="header-actions">
+          <button type="button" id="toolbar-toggle" class="ghost-btn" aria-label="Expandir/contraer configuración" aria-expanded="true">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="chevron">
+              <polyline points="6 9 12 15 18 9"></polyline>
+            </svg>
+            <span class="btn-text">Configuración</span>
+          </button>
+          <div class="status">
+            <span class="dot"></span>
+            <span id="status-text">Conectando...</span>
+          </div>
         </div>
       </header>
 
-      <section class="toolbar" aria-label="Configuración del chat">
+      <section class="toolbar" aria-label="Configuración del chat" data-collapsed="false">
         <div class="toolbar-left">
           <div class="toolbar-head">
             <label for="model-select">Modelo</label>
