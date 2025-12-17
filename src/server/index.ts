@@ -7,7 +7,16 @@ import { fileURLToPath } from "url";
 import { OpenAI } from "openai";
 import { ChatAgent } from "../core/chatAgent.js";
 import { getDownloadPath } from "./downloads.js";
-import { getConfig } from "../config/index.js";
+import {
+  getConfig,
+  getCurrentBaseURL,
+  getCurrentModel,
+  setModel,
+  setBaseURL,
+  setBackendType,
+  getDetectedBackend,
+  type BackendType,
+} from "../config/index.js";
 import { Logger } from "../core/logger.js";
 
 /**
@@ -18,10 +27,12 @@ export const app = express();
 
 // CORS configuration
 const FRONTEND_URL = process.env.FRONTEND_URL || "http://localhost:3000";
-app.use(cors({
-  origin: FRONTEND_URL,
-  credentials: true
-}));
+app.use(
+  cors({
+    origin: FRONTEND_URL,
+    credentials: true,
+  })
+);
 
 app.use(express.json());
 
@@ -65,27 +76,203 @@ setInterval(() => {
   }
 }, 5 * 60 * 1000); // Check every 5 minutes
 
+// ============ BACKEND DETECTION HELPERS ============
+
+/**
+ * Detect which backend is available (LM Studio or Ollama)
+ */
+async function detectBackend(baseURL: string): Promise<BackendType | null> {
+  const normalized = baseURL.replace(/\/$/, "");
+
+  // Try LM Studio first (OpenAI-compatible /v1/models)
+  try {
+    const lmStudioUrl = normalized.includes("/v1")
+      ? normalized + "/models"
+      : normalized + "/v1/models";
+    const resp = await fetch(lmStudioUrl, {
+      signal: AbortSignal.timeout(2000),
+    });
+    if (resp.ok) {
+      const body = await resp.json();
+      if (body.data || body.models || Array.isArray(body)) {
+        setBackendType("lm-studio");
+        return "lm-studio";
+      }
+    }
+  } catch (e) {
+    // Ignore LM Studio detection errors
+  }
+
+  // Try Ollama (/api/tags)
+  try {
+    const url = new URL(normalized);
+    const host = url.hostname;
+    const ollamaUrl = `http://${host}:11434/api/tags`;
+    const resp = await fetch(ollamaUrl, {
+      signal: AbortSignal.timeout(2000),
+    });
+    if (resp.ok) {
+      const body = await resp.json();
+      if (body.models && Array.isArray(body.models)) {
+        setBackendType("ollama");
+        return "ollama";
+      }
+    }
+  } catch (e) {
+    // Ignore Ollama detection errors
+  }
+
+  return null;
+}
+
+/**
+ * Fetch available models from the detected backend
+ */
+async function fetchModelsForBackend(
+  baseURL: string,
+  backend: BackendType | null
+): Promise<string[]> {
+  const normalized = baseURL.replace(/\/$/, "");
+
+  if (backend === "ollama") {
+    try {
+      const url = new URL(normalized);
+      const host = url.hostname;
+      const ollamaUrl = `http://${host}:11434/api/tags`;
+      const resp = await fetch(ollamaUrl);
+      if (resp.ok) {
+        const body = await resp.json();
+        if (body.models && Array.isArray(body.models)) {
+          return body.models.map((m: any) => m.name || m);
+        }
+      }
+    } catch (err) {
+      // ignore
+    }
+  } else {
+    // LM Studio (OpenAI-compatible)
+    try {
+      const lmStudioUrl = normalized.includes("/v1")
+        ? normalized + "/models"
+        : normalized + "/v1/models";
+      const resp = await fetch(lmStudioUrl);
+      if (resp.ok) {
+        const body = await resp.json();
+        if (Array.isArray(body)) {
+          return body.map((m: any) => (typeof m === "string" ? m : m.id));
+        }
+        if (body.data && Array.isArray(body.data)) {
+          return body.data.map((m: any) => m.id || m);
+        }
+        if (body.models && Array.isArray(body.models)) {
+          return body.models.map((m: any) =>
+            typeof m === "string" ? m : m.id
+          );
+        }
+      }
+    } catch (err) {
+      // ignore
+    }
+  }
+
+  return [];
+}
+
 app.use(express.static(publicDir));
 
 app.get("/api/models", async (_req: Request, res: Response) => {
   const config = getConfig();
-  const client = new OpenAI({ apiKey: config.apiKey, baseURL: config.baseURL });
+  let backend = getDetectedBackend();
+
+  // Auto-detect if not already detected
+  if (!backend) {
+    backend = await detectBackend(config.baseURL);
+  }
 
   try {
-    const models = await client.models.list();
-    const list =
-      models.data?.map((m) => ({
-        id: m.id,
-        created: m.created,
-        owned_by: (m as { owned_by?: string }).owned_by ?? "unknown"
-      })) ?? [];
-
-    res.json({ models: list, defaultModel: config.model });
+    const models = await fetchModelsForBackend(config.baseURL, backend);
+    res.json({
+      models: models.map((m) => ({ id: m })),
+      defaultModel: config.model,
+      backend: backend || "unknown",
+    });
   } catch (error) {
     Logger.error("Error in /api/models", error, "Server");
     res.status(500).json({ error: "No se pudieron obtener los modelos" });
   }
 });
+
+app.get("/api/config", (_req: Request, res: Response) => {
+  try {
+    return res.json({
+      model: getCurrentModel(),
+      baseURL: getCurrentBaseURL(),
+      backend: getDetectedBackend(),
+    });
+  } catch (err) {
+    return res
+      .status(500)
+      .json({ error: "Failed to read config", details: String(err) });
+  }
+});
+
+app.post("/api/model", express.json(), (req: Request, res: Response) => {
+  const { model, baseURL } = req.body as {
+    model?: string;
+    baseURL?: string;
+  };
+
+  if (!model && !baseURL) {
+    return res
+      .status(400)
+      .json({ error: "Se requiere 'model' o 'baseURL' en el cuerpo" });
+  }
+
+  if (model) setModel(model);
+  if (baseURL) setBaseURL(baseURL);
+
+  // Limpiar sesiones activas
+  agents.clear();
+
+  return res.json({ ok: true, model: model ?? null, baseURL: baseURL ?? null });
+});
+
+app.post(
+  "/api/model/load",
+  express.json(),
+  async (req: Request, res: Response) => {
+    const { model } = req.body as { model?: string };
+    if (!model) {
+      return res.status(400).json({ error: "Model name required" });
+    }
+
+    let baseURL = getCurrentBaseURL();
+    const maxWaitMs = 30000; // 30 seconds max
+    const pollIntervalMs = 2000; // Poll every 2 seconds
+    const startTime = Date.now();
+
+    let backend = getDetectedBackend();
+    if (!backend) {
+      backend = await detectBackend(baseURL);
+    }
+
+    // Poll until model is available
+    while (Date.now() - startTime < maxWaitMs) {
+      const available = await fetchModelsForBackend(baseURL, backend);
+      if (available.includes(model)) {
+        setModel(model);
+        agents.clear();
+        return res.json({ ok: true, loaded: true, model });
+      }
+      await new Promise((r) => setTimeout(r, pollIntervalMs));
+    }
+
+    return res.status(408).json({
+      error: `Model '${model}' did not load within ${maxWaitMs / 1000}s`,
+      timeout: true,
+    });
+  }
+);
 
 app.get("/api/system-prompt", (_req: Request, res: Response) => {
   res.json({ systemPrompt: currentSystemPrompt });
@@ -93,7 +280,11 @@ app.get("/api/system-prompt", (_req: Request, res: Response) => {
 
 app.post("/api/system-prompt", (req: Request, res: Response) => {
   const { systemPrompt } = req.body as { systemPrompt?: string };
-  if (!systemPrompt || typeof systemPrompt !== "string" || !systemPrompt.trim()) {
+  if (
+    !systemPrompt ||
+    typeof systemPrompt !== "string" ||
+    !systemPrompt.trim()
+  ) {
     return res.status(400).json({ error: "El system prompt es obligatorio" });
   }
 

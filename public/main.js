@@ -58,6 +58,12 @@ async function loadModels() {
       typeof payload.defaultModel === "string" ? payload.defaultModel : null;
     state.models = ids;
 
+    // Store detected backend
+    if (payload.backend) {
+      localStorage.setItem("agent-backend", payload.backend);
+      setModelStatus(`Backend detectado: ${payload.backend}`);
+    }
+
     renderModelOptions(ids);
 
     const candidate =

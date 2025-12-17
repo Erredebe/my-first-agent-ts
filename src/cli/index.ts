@@ -1,19 +1,26 @@
 import chalk from "chalk";
 import readline from "readline";
 import { ChatAgent } from "../core/chatAgent.js";
-import { BASE_URL, MODEL, getConfig } from "../config/index.js";
+import {
+  getConfig,
+  getCurrentBaseURL,
+  getCurrentModel,
+} from "../config/index.js";
 
-const agent = new ChatAgent(getConfig());
+const config = getConfig();
+const agent = new ChatAgent(config);
 
 const rl = readline.createInterface({
   input: process.stdin,
   output: process.stdout,
-  prompt: chalk.green("tú > ")
+  prompt: chalk.green("tú > "),
 });
 
 const intro = `${chalk.bold("Agente GPT OSS (CLI)")}
-Base: ${BASE_URL} | Modelo: ${MODEL}
-Escribe ${chalk.cyan("/salir")} para terminar o ${chalk.cyan("/borrar")} para limpiar el contexto.`;
+Base: ${getCurrentBaseURL()} | Modelo: ${getCurrentModel()}
+Escribe ${chalk.cyan("/salir")} para terminar o ${chalk.cyan(
+  "/borrar"
+)} para limpiar el contexto.`;
 
 console.log(intro);
 
@@ -58,7 +65,9 @@ async function main() {
     if (reply) {
       process.stdout.write(chalk.blue("agente > ") + reply + "\n");
     } else {
-      process.stdout.write(chalk.yellow("No se recibió respuesta del modelo.\n"));
+      process.stdout.write(
+        chalk.yellow("No se recibió respuesta del modelo.\n")
+      );
     }
     rl.prompt();
   }
