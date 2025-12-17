@@ -132,12 +132,24 @@ async function detectBackend(baseURL: string): Promise<BackendType | null> {
 }
 
 /**
+ * Model information interface
+ */
+interface ModelInfo {
+  id: string;
+  name: string;
+  size?: string;
+  family?: string;
+  modified?: string;
+  digest?: string;
+}
+
+/**
  * Fetch available models from the detected backend
  */
 async function fetchModelsForBackend(
   baseURL: string,
   backend: BackendType | null
-): Promise<string[]> {
+): Promise<ModelInfo[]> {
   const normalized = baseURL.replace(/\/$/, "");
 
   if (backend === "ollama") {
@@ -149,7 +161,14 @@ async function fetchModelsForBackend(
       if (resp.ok) {
         const body = await resp.json();
         if (body.models && Array.isArray(body.models)) {
-          return body.models.map((m: any) => m.name || m);
+          return body.models.map((m: any) => ({
+            id: m.name || m.model || m,
+            name: m.name || m.model || m,
+            size: m.size ? formatBytes(m.size) : undefined,
+            family: m.details?.family || extractFamily(m.name),
+            modified: m.modified_at,
+            digest: m.digest,
+          }));
         }
       }
     } catch (err) {
@@ -164,17 +183,25 @@ async function fetchModelsForBackend(
       const resp = await fetch(lmStudioUrl);
       if (resp.ok) {
         const body = await resp.json();
+        let models: any[] = [];
+        
         if (Array.isArray(body)) {
-          return body.map((m: any) => (typeof m === "string" ? m : m.id));
+          models = body;
+        } else if (body.data && Array.isArray(body.data)) {
+          models = body.data;
+        } else if (body.models && Array.isArray(body.models)) {
+          models = body.models;
         }
-        if (body.data && Array.isArray(body.data)) {
-          return body.data.map((m: any) => m.id || m);
-        }
-        if (body.models && Array.isArray(body.models)) {
-          return body.models.map((m: any) =>
-            typeof m === "string" ? m : m.id
-          );
-        }
+        
+        return models.map((m: any) => {
+          const id = typeof m === "string" ? m : (m.id || m.name || m);
+          return {
+            id,
+            name: id,
+            size: m.size ? formatBytes(m.size) : undefined,
+            family: extractFamily(id),
+          };
+        });
       }
     } catch (err) {
       // ignore
@@ -182,6 +209,32 @@ async function fetchModelsForBackend(
   }
 
   return [];
+}
+
+/**
+ * Format bytes to human-readable string
+ */
+function formatBytes(bytes: number): string {
+  if (bytes === 0) return "0 B";
+  const k = 1024;
+  const sizes = ["B", "KB", "MB", "GB", "TB"];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return Math.round(bytes / Math.pow(k, i) * 100) / 100 + " " + sizes[i];
+}
+
+/**
+ * Extract model family from model name
+ */
+function extractFamily(modelName: string): string | undefined {
+  const name = modelName.toLowerCase();
+  if (name.includes("llama")) return "llama";
+  if (name.includes("gpt")) return "gpt";
+  if (name.includes("mistral")) return "mistral";
+  if (name.includes("deepseek")) return "deepseek";
+  if (name.includes("phi")) return "phi";
+  if (name.includes("gemma")) return "gemma";
+  if (name.includes("qwen")) return "qwen";
+  return undefined;
 }
 
 app.use(express.static(publicDir));
@@ -198,7 +251,7 @@ app.get("/api/models", async (_req: Request, res: Response) => {
   try {
     const models = await fetchModelsForBackend(config.baseURL, backend);
     res.json({
-      models: models.map((m) => ({ id: m })),
+      models,
       defaultModel: config.model,
       backend: backend || "unknown",
     });
@@ -265,7 +318,7 @@ app.post(
     // Poll until model is available
     while (Date.now() - startTime < maxWaitMs) {
       const available = await fetchModelsForBackend(baseURL, backend);
-      if (available.includes(model)) {
+      if (available.some(m => m.id === model)) {
         setModel(model);
         agents.clear();
         return res.json({ ok: true, loaded: true, model });

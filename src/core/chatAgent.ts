@@ -8,6 +8,9 @@ import { Logger } from "./logger.js";
 // Combinar todas las herramientas disponibles
 const allTools = [...fileTools, ...webTools];
 
+// Cache to track which models support tools
+const modelToolSupport = new Map<string, boolean>();
+
 /**
  * Pequeño orquestador que conserva el historial, invoca el modelo
  * y ejecuta herramientas cuando el modelo las solicita.
@@ -18,11 +21,20 @@ export class ChatAgent {
 
   // Historial de conversación que se envía en cada petición.
   private conversation: MessageParam[];
+  
+  // Track if this model supports tools
+  private toolsSupported: boolean | null = null;
 
   constructor(config: Config) {
     this.config = config;
     this.client = new OpenAI({ apiKey: config.apiKey, baseURL: config.baseURL });
     this.conversation = [{ role: "system", content: config.systemPrompt }];
+    
+    // Check cache for tool support
+    const cached = modelToolSupport.get(config.model);
+    if (cached !== undefined) {
+      this.toolsSupported = cached;
+    }
   }
 
   /**
@@ -35,7 +47,9 @@ export class ChatAgent {
 
     this.conversation.push({ role: "user", content: trimmed });
 
-    const firstMessage = await this.requestMessage(true);
+    // Try with tools if we haven't determined support yet or if we know it's supported
+    const shouldTryTools = this.toolsSupported !== false;
+    const firstMessage = await this.requestMessage(shouldTryTools);
     if (!firstMessage) return null;
 
     if (hasToolCalls(firstMessage)) {
@@ -92,7 +106,7 @@ export class ChatAgent {
     }
 
     if (toolOutputs.length) {
-      const fallback = toolOutputs.join("\n\n");
+      const fallback = toolOutputs.join("\\n\\n");
       this.appendAssistant(fallback);
       return fallback;
     }
@@ -100,9 +114,6 @@ export class ChatAgent {
     return null;
   }
 
-  /**
-   * Ejecuta todas las tool_calls y agrega los mensajes "tool" al historial.
-   */
   /**
    * Ejecuta todas las tool_calls y agrega los mensajes "tool" al historial.
    */
@@ -157,8 +168,31 @@ export class ChatAgent {
         tool_choice: allowTools ? "auto" : undefined
       });
 
+      // If we successfully used tools, mark as supported
+      if (allowTools && this.toolsSupported === null) {
+        this.toolsSupported = true;
+        modelToolSupport.set(this.config.model, true);
+        Logger.info(`Model ${this.config.model} supports tools`, "ChatAgent");
+      }
+
       return completion.choices[0]?.message ?? null;
     } catch (error) {
+      // Check if error is due to tools not being supported
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      const isToolError = errorMessage.includes("does not support tools") || 
+                         (errorMessage.includes("tool") && errorMessage.includes("not supported"));
+      
+      if (isToolError && allowTools) {
+        Logger.info(`Model ${this.config.model} does not support tools, retrying without tools`, "ChatAgent");
+        
+        // Mark model as not supporting tools
+        this.toolsSupported = false;
+        modelToolSupport.set(this.config.model, false);
+        
+        // Retry without tools
+        return this.requestMessage(false);
+      }
+      
       Logger.error("Error requesting message from OpenAI", error, "ChatAgent");
       return null;
     }

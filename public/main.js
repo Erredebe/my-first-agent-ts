@@ -59,15 +59,12 @@ async function loadModels() {
     }
 
     const payload = await response.json();
-    const ids = Array.isArray(payload.models)
-      ? payload.models
-          .map((m) => (typeof m === "string" ? m : m?.id))
-          .filter(Boolean)
-      : [];
+    const models = Array.isArray(payload.models) ? payload.models : [];
+    const ids = models.map((m) => m.id || m).filter(Boolean);
 
     state.defaultModel =
       typeof payload.defaultModel === "string" ? payload.defaultModel : null;
-    state.models = ids;
+    state.models = models;
 
     // Store detected backend
     if (payload.backend) {
@@ -75,7 +72,7 @@ async function loadModels() {
       setModelStatus(`Backend detectado: ${payload.backend}`);
     }
 
-    renderModelOptions(ids);
+    renderModelOptions(models);
 
     // Only select a model if we actually have models available
     const candidate =
@@ -109,11 +106,11 @@ async function loadModels() {
   }
 }
 
-function renderModelOptions(list) {
+function renderModelOptions(models) {
   if (!DOM.modelSelect) return;
   DOM.modelSelect.innerHTML = "";
 
-  if (!list.length) {
+  if (!models.length) {
     const opt = document.createElement("option");
     opt.value = "";
     opt.textContent = "Sin modelos";
@@ -122,10 +119,21 @@ function renderModelOptions(list) {
     return;
   }
 
-  list.forEach((id) => {
+  models.forEach((model) => {
     const opt = document.createElement("option");
+    const id = model.id || model;
     opt.value = id;
-    opt.textContent = id;
+    
+    // Build display text with additional info
+    let displayText = id;
+    if (model.size || model.family) {
+      const extras = [];
+      if (model.family) extras.push(model.family);
+      if (model.size) extras.push(model.size);
+      displayText += ` (${extras.join(", ")})`;
+    }
+    
+    opt.textContent = displayText;
     DOM.modelSelect.appendChild(opt);
   });
 
