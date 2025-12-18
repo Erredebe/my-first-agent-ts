@@ -13,6 +13,12 @@ const DOM = {
   promptStatus: document.getElementById("prompt-status"),
   toolbar: document.querySelector(".toolbar"),
   toolbarToggle: document.getElementById("toolbar-toggle"),
+  uploadForm: document.getElementById("upload-form"),
+  fileInput: document.getElementById("file-input"),
+  uploadBtn: document.getElementById("upload-btn"),
+  fileLabel: document.getElementById("file-label"),
+  uploadStatus: document.getElementById("upload-status"),
+  attachmentList: document.getElementById("attachment-list"),
 };
 
 const state = {
@@ -24,7 +30,19 @@ const state = {
   systemPrompt: "",
   isConnected: false,
   toolbarCollapsed: localStorage.getItem("toolbar-collapsed") === "true",
+  attachments: [],
 };
+
+const MAX_UPLOAD_BYTES = 10 * 1024 * 1024; // 10MB
+const ALLOWED_UPLOAD_TYPES = new Set([
+  "text/plain",
+  "application/pdf",
+  "application/msword",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  "image/png",
+  "image/jpeg",
+  "image/gif",
+]);
 
 DOM.form.addEventListener("submit", handleSubmit);
 DOM.input.addEventListener("keydown", handleInputKeydown);
@@ -33,6 +51,8 @@ DOM.modelSelect?.addEventListener("change", handleModelChange);
 DOM.refreshModelsBtn?.addEventListener("click", () => loadModels());
 DOM.saveSystemPromptBtn?.addEventListener("click", handleSystemPromptSave);
 DOM.toolbarToggle?.addEventListener("click", toggleToolbar);
+DOM.uploadForm?.addEventListener("submit", handleUploadSubmit);
+DOM.fileInput?.addEventListener("change", handleFileChange);
 
 // Initialize toolbar state
 initializeToolbar();
@@ -45,6 +65,8 @@ loadModels().catch(() => {
 loadSystemPrompt().catch(() => {
   setPromptStatus("No se pudo cargar el system prompt", true);
 });
+renderAttachments();
+handleFileChange();
 
 async function loadModels() {
   if (!DOM.modelSelect) return;
@@ -215,7 +237,7 @@ async function handleSystemPromptSave() {
   if (!DOM.systemPromptInput) return;
   const value = DOM.systemPromptInput.value.trim();
   if (!value) {
-    setPromptStatus("El system prompt no puede estar vac��o", true);
+    setPromptStatus("El system prompt no puede estar vacío", true);
     return;
   }
 
@@ -269,6 +291,178 @@ function togglePromptControls(isLoading) {
   }
 }
 
+function handleFileChange() {
+  const file = DOM.fileInput?.files?.[0];
+  if (!DOM.fileLabel) return;
+  DOM.fileLabel.textContent = file
+    ? `${file.name} (${formatBytes(file.size)})`
+    : "Selecciona un archivo";
+}
+
+async function handleUploadSubmit(event) {
+  event.preventDefault();
+  if (!DOM.fileInput) return;
+  const file = DOM.fileInput.files?.[0];
+
+  if (!file) {
+    setUploadStatus("Selecciona un archivo para subir", true);
+    return;
+  }
+
+  if (file.size > MAX_UPLOAD_BYTES) {
+    setUploadStatus(`El archivo supera el límite de 10MB (${formatBytes(file.size)})`, true);
+    return;
+  }
+
+  if (!ALLOWED_UPLOAD_TYPES.has(file.type)) {
+    setUploadStatus(`Tipo no permitido (${file.type || "desconocido"})`, true);
+    return;
+  }
+
+  setUploadLoading(true);
+  setUploadStatus("Subiendo archivo...");
+
+  try {
+    const uploaded = await uploadFileToServer(file);
+    addAttachment(uploaded);
+    setUploadStatus(`Archivo listo: ${uploaded.relativePath || uploaded.filePath}`);
+    DOM.fileInput.value = "";
+    handleFileChange();
+  } catch (error) {
+    setUploadStatus(error instanceof Error ? error.message : "No se pudo subir el archivo", true);
+  } finally {
+    setUploadLoading(false);
+  }
+}
+
+function setUploadLoading(isLoading) {
+  if (DOM.uploadBtn) {
+    DOM.uploadBtn.disabled = isLoading;
+    DOM.uploadBtn.textContent = isLoading ? "Subiendo..." : "Subir";
+    DOM.uploadBtn.setAttribute("aria-busy", String(isLoading));
+  }
+  if (DOM.fileInput) {
+    DOM.fileInput.disabled = isLoading;
+  }
+}
+
+function setUploadStatus(text, isError = false) {
+  if (!DOM.uploadStatus) return;
+  DOM.uploadStatus.textContent = text;
+  DOM.uploadStatus.classList.toggle("error", Boolean(isError));
+}
+
+async function uploadFileToServer(file) {
+  const base64 = await fileToBase64(file);
+
+  const response = await fetch(`${window.API_URL}/api/upload`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      name: file.name,
+      type: file.type,
+      size: file.size,
+      content: base64,
+    }),
+  });
+
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({}));
+    throw new Error(err.error || "No se pudo subir el archivo");
+  }
+
+  return response.json();
+}
+
+function fileToBase64(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const buffer = reader.result;
+      if (!(buffer instanceof ArrayBuffer)) {
+        reject(new Error("No se pudo leer el archivo"));
+        return;
+      }
+      const bytes = new Uint8Array(buffer);
+      let binary = "";
+      bytes.forEach((b) => {
+        binary += String.fromCharCode(b);
+      });
+      resolve(btoa(binary));
+    };
+    reader.onerror = () => reject(new Error("No se pudo leer el archivo"));
+    reader.readAsArrayBuffer(file);
+  });
+}
+
+function addAttachment(attachment) {
+  state.attachments.push(attachment);
+  renderAttachments();
+}
+
+function removeAttachment(index) {
+  state.attachments.splice(index, 1);
+  renderAttachments();
+}
+
+function renderAttachments() {
+  if (!DOM.attachmentList) return;
+  DOM.attachmentList.innerHTML = "";
+
+  if (!state.attachments.length) {
+    DOM.attachmentList.textContent = "No hay archivos listos. Sube uno para compartirlo.";
+    return;
+  }
+
+  state.attachments.forEach((file, index) => {
+    const chip = document.createElement("div");
+    chip.className = "attachment-chip";
+
+    const name = file.originalName || file.name || "Archivo";
+    const label = document.createElement("span");
+    label.textContent = `${name} (${formatBytes(file.size ?? 0)})`;
+    chip.appendChild(label);
+
+    const pathInfo = document.createElement("span");
+    pathInfo.className = "muted";
+    pathInfo.textContent = file.relativePath || file.filePath || "";
+    chip.appendChild(pathInfo);
+
+    const removeBtn = document.createElement("button");
+    removeBtn.type = "button";
+    removeBtn.setAttribute("aria-label", `Quitar ${name}`);
+    removeBtn.textContent = "×";
+    removeBtn.addEventListener("click", () => removeAttachment(index));
+    chip.appendChild(removeBtn);
+
+    DOM.attachmentList.appendChild(chip);
+  });
+}
+
+function buildMessageWithAttachments(text, attachments) {
+  if (!attachments.length) return text;
+
+  const files = attachments
+    .map((file) => {
+      const label = file.relativePath || file.filePath || file.originalName || file.name || "archivo";
+      const type = file.mimeType || "tipo desconocido";
+      const sizeLabel = formatBytes(file.size ?? 0);
+      const download = file.downloadUrl ? ` [descarga: ${file.downloadUrl}]` : "";
+      return `- ${label} (${type}, ${sizeLabel})${download}`;
+    })
+    .join("\n");
+
+  return `${text}\n\nArchivos disponibles para el asistente (usa read_file o convert_file_to_base64 si los necesitas):\n${files}`;
+}
+
+function formatBytes(bytes) {
+  if (!bytes) return "0 B";
+  const units = ["B", "KB", "MB", "GB"];
+  const exponent = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1);
+  const value = bytes / 1024 ** exponent;
+  return `${value.toFixed(value >= 10 ? 0 : 1)} ${units[exponent]}`;
+}
+
 async function handleSubmit(event) {
   event.preventDefault();
   if (state.isThinking) return; // bloquear envíos mientras el modelo procesa
@@ -276,13 +470,20 @@ async function handleSubmit(event) {
   const text = DOM.input.value.trim();
   if (!text) return;
 
-  appendBubble(text, "user");
+  const attachments = [...state.attachments];
+  const message = buildMessageWithAttachments(text, attachments);
+
+  appendBubble(text, "user", attachments);
   DOM.input.value = "";
   setThinking(true);
 
   try {
-    const reply = await sendMessage(text);
+    const reply = await sendMessage(message);
     appendBubble(reply ?? "(sin respuesta)", "assistant");
+    if (attachments.length) {
+      state.attachments = [];
+      renderAttachments();
+    }
   } catch (error) {
     appendBubble(`Error: ${error.message}`, "assistant");
   } finally {
@@ -348,7 +549,7 @@ async function sendMessage(message) {
   return data.reply;
 }
 
-function appendBubble(text, role) {
+function appendBubble(text, role, attachments = []) {
   const bubble = document.createElement("div");
   bubble.className = `bubble ${role}`;
 
@@ -356,6 +557,20 @@ function appendBubble(text, role) {
     renderAssistantContent(bubble, text);
   } else {
     bubble.textContent = text;
+
+    if (attachments?.length) {
+      const list = document.createElement("ul");
+      list.className = "helper";
+
+      attachments.forEach((file) => {
+        const item = document.createElement("li");
+        const name = file.originalName || file.name || file.relativePath || "Archivo";
+        item.textContent = `${name} (${formatBytes(file.size ?? 0)}) - ${file.relativePath || file.filePath}`;
+        list.appendChild(item);
+      });
+
+      bubble.appendChild(list);
+    }
   }
 
   const thinking = document.getElementById("thinking-bubble");

@@ -309,6 +309,97 @@ select:focus, .prompt-input:focus {
   color: #ef4444;
 }
 
+.upload-card {
+  background: var(--bg-panel);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  padding: 1.25rem 1rem;
+  box-shadow: var(--shadow-md);
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.upload-card__header {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  align-items: flex-start;
+}
+
+.upload-card h3 {
+  margin: 0.25rem 0;
+}
+
+.upload-form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  justify-content: flex-end;
+  align-items: center;
+}
+
+.file-picker {
+  position: relative;
+  overflow: hidden;
+  border: 1px dashed var(--border-color);
+  border-radius: var(--radius-md);
+  padding: 0.65rem 0.9rem;
+  min-width: 220px;
+  color: var(--text-muted);
+  cursor: pointer;
+  background: var(--bg-input);
+}
+
+.file-picker input[type="file"] {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.primary-btn {
+  background: var(--primary);
+  border: none;
+  color: var(--on-primary);
+  padding: 0.65rem 1.1rem;
+  border-radius: var(--radius-md);
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: var(--shadow-sm);
+  transition: background 0.2s ease, box-shadow 0.2s ease;
+}
+
+.primary-btn:hover {
+  background: var(--primary-hover);
+  box-shadow: var(--shadow-md);
+}
+
+.attachment-list {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.attachment-chip {
+  background: var(--bg-input);
+  border: 1px solid var(--border-color);
+  border-radius: 999px;
+  padding: 0.35rem 0.7rem;
+  display: inline-flex;
+  gap: 0.5rem;
+  align-items: center;
+  font-size: 0.85rem;
+}
+
+.attachment-chip button {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 0;
+}
+
 /* Chat Area Main Panel */
 .panel {
   flex: 1;
@@ -556,6 +647,19 @@ select:focus, .prompt-input:focus {
     gap: 1rem;
   }
 
+  .upload-card {
+    margin: 0 1rem 1rem;
+  }
+
+  .upload-card__header {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .upload-form {
+    justify-content: flex-start;
+  }
+
   .panel {
     border-radius: var(--radius-lg) var(--radius-lg) 0 0;
     border-bottom: none;
@@ -567,6 +671,11 @@ select:focus, .prompt-input:focus {
   
   .toolbar {
     padding: 1rem;
+  }
+
+  .file-picker,
+  .upload-form {
+    width: 100%;
   }
   
   .bubble {

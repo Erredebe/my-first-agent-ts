@@ -62,6 +62,28 @@ describe("server routes", () => {
     expect(after.body.systemPrompt).toBe("nuevo prompt");
   });
 
+  it("acepta subida de archivos base64 y devuelve ruta de descarga", async () => {
+    const tmpFile = path.join(os.tmpdir(), "upload-test.txt");
+    const content = "hola upload";
+    await fs.writeFile(tmpFile, content, "utf8");
+
+    const encoded = Buffer.from(content, "utf8").toString("base64");
+
+    const res = await request(app).post("/api/upload").send({
+      name: "upload-test.txt",
+      type: "text/plain",
+      size: content.length,
+      content: encoded
+    });
+
+    expect(res.status).toBe(200);
+    expect(res.body.downloadUrl).toContain("/api/download/");
+    expect(res.body.relativePath).toContain("uploads");
+
+    const saved = await fs.readFile(res.body.filePath, "utf8");
+    expect(saved).toBe(content);
+  });
+
   it("devuelve 404 para tokens de descarga inválidos", async () => {
     const res = await request(app).get("/api/download/token-invalido");
     expect(res.status).toBe(404);

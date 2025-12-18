@@ -34,6 +34,28 @@ export const fileTools: OpenAI.Chat.Completions.ChatCompletionTool[] = [
   {
     type: "function",
     function: {
+      name: "convert_file_to_base64",
+      description:
+        "Lee un archivo binario y devuelve su contenido en base64, truncándolo si excede el límite",
+      parameters: {
+        type: "object",
+        properties: {
+          file_path: {
+            type: "string",
+            description: "Ruta del archivo a codificar"
+          },
+          max_bytes: {
+            type: "number",
+            description: `Máximo de bytes a leer antes de codificar (por defecto ${DEFAULT_MAX_READ_BYTES})`
+          }
+        },
+        required: ["file_path"]
+      }
+    }
+  },
+  {
+    type: "function",
+    function: {
       name: "prepare_file_download",
       description: "Crea o sobreescribe un archivo y devuelve un enlace de descarga listo para el navegador",
       parameters: {
@@ -113,6 +135,10 @@ const toolHandlers: Record<string, ToolHandler> = {
     const args = rawArgs as { file_path: string; max_bytes?: number };
     return readFileTool(args.file_path, args.max_bytes ?? DEFAULT_MAX_READ_BYTES);
   },
+  convert_file_to_base64: async (rawArgs) => {
+    const args = rawArgs as { file_path: string; max_bytes?: number };
+    return convertFileToBase64Tool(args.file_path, args.max_bytes ?? DEFAULT_MAX_READ_BYTES);
+  },
   prepare_file_download: async (rawArgs) => {
     const args = rawArgs as { file_path: string; content: string; mode?: "replace" | "append" };
     return prepareFileDownloadTool(args.file_path, args.content, args.mode);
@@ -165,6 +191,28 @@ async function readFileTool(filePath: string, maxBytes: number): Promise<string>
     return `Leídos ${maxBytes} bytes de ${resolved} (archivo truncado).\n\n${slice}`;
   }
   return data.toString("utf8");
+}
+
+async function convertFileToBase64Tool(
+  filePath: string,
+  maxBytes: number
+): Promise<string> {
+  const resolved = resolvePath(filePath);
+  const data = await fs.readFile(resolved);
+  const limited = data.length > maxBytes ? data.subarray(0, maxBytes) : data;
+  const base64 = limited.toString("base64");
+  const note =
+    data.length > maxBytes
+      ? `Archivo truncado a ${maxBytes} bytes antes de codificar.`
+      : "Archivo codificado completo.";
+
+  return [
+    note,
+    `Ruta: ${resolved}`,
+    `Bytes originales: ${data.length}`,
+    `Bytes codificados: ${limited.length}`,
+    `Base64: ${base64}`
+  ].join("\n");
 }
 
 async function writeFileTool(

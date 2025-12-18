@@ -4,16 +4,15 @@ import path from "path";
 import { randomUUID } from "crypto";
 import { exec } from "child_process";
 import { fileURLToPath } from "url";
-import { OpenAI } from "openai";
+import fs from "fs/promises";
 import { ChatAgent } from "../core/chatAgent.js";
-import { getDownloadPath } from "./downloads.js";
+import { createDownloadToken, getDownloadPath } from "./downloads.js";
 import {
   getConfig,
   getCurrentBaseURL,
   getCurrentModel,
   setModel,
   setBaseURL,
-  setBackendType,
   getDetectedBackend,
 } from "../config/index.js";
 import { Logger } from "../core/logger.js";
@@ -37,12 +36,25 @@ app.use(
   })
 );
 
-app.use(express.json());
+app.use(express.json({ limit: "20mb" }));
+app.use(express.urlencoded({ limit: "20mb", extended: true }));
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const publicDir = path.resolve(__dirname, "../../public");
 let currentSystemPrompt = getConfig().systemPrompt;
+const UPLOAD_DIR = path.resolve(process.cwd(), "uploads");
+const uploadsReady = fs.mkdir(UPLOAD_DIR, { recursive: true });
+const MAX_UPLOAD_BYTES = 10 * 1024 * 1024; // 10 MB
+const ALLOWED_MIME_TYPES = new Set([
+  "text/plain",
+  "application/pdf",
+  "application/msword",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  "image/png",
+  "image/jpeg",
+  "image/gif",
+]);
 
 // Cada pestaña del navegador conserva su sesión de conversación.
 const agents = new Map<
@@ -199,6 +211,72 @@ app.post("/api/system-prompt", (req: Request, res: Response) => {
   }
 
   res.json({ systemPrompt: currentSystemPrompt });
+});
+
+app.post("/api/upload", async (req: Request, res: Response) => {
+  const { name, type, size, content } = req.body as {
+    name?: string;
+    type?: string;
+    size?: number;
+    content?: string;
+  };
+
+  try {
+    await uploadsReady;
+  } catch (error) {
+    Logger.error("No se pudo crear el directorio de uploads", error, "Server");
+    return res.status(500).json({ error: "No se pudo preparar la carpeta de archivos" });
+  }
+
+  if (!name || !type || typeof content !== "string" || typeof size !== "number") {
+    return res.status(400).json({ error: "Faltan campos obligatorios: name, type, size o content" });
+  }
+
+  if (size <= 0 || size > MAX_UPLOAD_BYTES) {
+    return res
+      .status(400)
+      .json({ error: `El archivo es demasiado grande (límite ${MAX_UPLOAD_BYTES} bytes)` });
+  }
+
+  if (!ALLOWED_MIME_TYPES.has(type)) {
+    return res.status(400).json({ error: `Tipo de archivo no permitido: ${type}` });
+  }
+
+  let buffer: Buffer;
+  try {
+    buffer = Buffer.from(content, "base64");
+  } catch (error) {
+    Logger.error("No se pudo decodificar el archivo en base64", error, "Server");
+    return res.status(400).json({ error: "Contenido inválido" });
+  }
+
+  if (buffer.length > MAX_UPLOAD_BYTES) {
+    return res
+      .status(400)
+      .json({ error: `El archivo es demasiado grande (límite ${MAX_UPLOAD_BYTES} bytes)` });
+  }
+
+  const extension = path.extname(name) || "";
+  const safeBaseName = path.basename(name, extension).replace(/[^a-zA-Z0-9._-]/g, "_") || "archivo";
+  const storedName = `${Date.now()}-${randomUUID()}-${safeBaseName}${extension}`;
+  const storedPath = path.join(UPLOAD_DIR, storedName);
+
+  try {
+    await fs.writeFile(storedPath, buffer);
+    const token = await createDownloadToken(storedPath);
+    return res.json({
+      ok: true,
+      filePath: storedPath,
+      relativePath: path.relative(process.cwd(), storedPath),
+      downloadUrl: `/api/download/${token}`,
+      mimeType: type,
+      originalName: name,
+      size: buffer.length,
+    });
+  } catch (error) {
+    Logger.error("No se pudo guardar el archivo subido", error, "Server");
+    return res.status(500).json({ error: "No se pudo guardar el archivo" });
+  }
 });
 
 app.post("/api/chat", async (req: Request, res: Response) => {
