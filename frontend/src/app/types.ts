@@ -20,6 +20,17 @@ export interface ChatMessage {
   attachments?: AttachmentInfo[];
 }
 
+export interface ChatRequestPayload {
+  message: string;
+  sessionId?: string;
+  model?: string;
+}
+
+export interface ChatResponse {
+  reply: string | null;
+  sessionId: string | null;
+}
+
 export function formatBytes(bytes: number): string {
   if (!bytes) return '0 B';
   const units = ['B', 'KB', 'MB', 'GB'];
