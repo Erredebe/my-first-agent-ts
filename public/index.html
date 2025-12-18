@@ -71,6 +71,30 @@
         </div>
       </section>
 
+      <section class="upload-card" aria-label="Subir archivos para el asistente">
+        <div class="upload-card__header">
+          <div>
+            <p class="eyebrow">Archivos</p>
+            <h3>Comparte documentos e imágenes con el modelo</h3>
+            <p class="muted">
+              Los archivos se guardan de forma local en la carpeta <code>uploads/</code> y el modelo puede leerlos
+              usando las herramientas de fichero.
+            </p>
+          </div>
+          <form id="upload-form" class="upload-form">
+            <label class="file-picker" aria-label="Seleccionar archivo para subir">
+              <input type="file" id="file-input" name="file" />
+              <span id="file-label">Selecciona un archivo</span>
+            </label>
+            <button type="submit" id="upload-btn" class="primary-btn">Subir</button>
+          </form>
+        </div>
+        <p id="upload-status" class="helper muted" role="status" aria-live="polite">
+          Formatos permitidos: txt, pdf, doc, docx, png, jpg, jpeg, gif. Límite 10MB.
+        </p>
+        <div id="attachment-list" class="attachment-list" aria-live="polite"></div>
+      </section>
+
       <main class="panel" role="main">
         <div id="messages" class="messages" role="log" aria-live="polite" aria-label="Historial del chat"></div>
 

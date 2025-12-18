@@ -85,4 +85,19 @@ describe("fileTools", () => {
     const content = await fs.readFile(filePath, "utf8");
     expect(content).toBe("contenido");
   });
+
+  it("convierte un archivo binario a base64 respetando el límite", async () => {
+    const filePath = path.join(tmpRoot, "bin.dat");
+    const buffer = Buffer.from([0, 1, 2, 3, 4, 5]);
+    await fs.writeFile(filePath, buffer);
+
+    const toolCall = buildToolCall("convert_file_to_base64", {
+      file_path: filePath,
+      max_bytes: 4
+    });
+
+    const result = await executeFileToolCall(toolCall);
+    expect(result.content).toContain("Archivo truncado a 4 bytes");
+    expect(result.content).toContain(buffer.subarray(0, 4).toString("base64"));
+  });
 });
