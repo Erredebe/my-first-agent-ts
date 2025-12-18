@@ -1,0 +1,29 @@
+<section class="upload-card" aria-label="Subir archivos para el asistente">
+  <div class="upload-card__header">
+    <div>
+      <p class="eyebrow">Archivos</p>
+      <h3>Comparte documentos e imágenes con el modelo</h3>
+      <p class="muted">
+        Los archivos se guardan de forma local en la carpeta <code>uploads/</code> y el modelo puede leerlos usando las herramientas de fichero.
+      </p>
+    </div>
+    <form class="upload-form" (submit)="$event.preventDefault()">
+      <label class="file-picker">
+        <input #fileInput type="file" id="file-input" name="file" (change)="onFileChange($event.target?.files || null)" />
+        <span id="file-label">Selecciona un archivo</span>
+      </label>
+      <button type="button" id="upload-btn" class="primary-btn" (click)="triggerUpload(fileInput)">Subir</button>
+    </form>
+  </div>
+  <p id="upload-status" class="helper muted" role="status" aria-live="polite">
+    Formatos permitidos: txt, pdf, doc, docx, png, jpg, jpeg, gif. Límite 10MB.
+  </p>
+  <div id="attachment-list" class="attachment-list" aria-live="polite">
+    <div *ngIf="!attachments.length">No hay archivos listos. Sube uno para compartirlo.</div>
+    <div *ngFor="let file of attachments; let i = index" class="attachment-chip">
+      <span>{{ (file.originalName || file.name || 'Archivo') }} ({{ formatBytes(file.size ?? 0) }})</span>
+      <span class="muted">{{ file.relativePath || file.filePath }}</span>
+      <button type="button" aria-label="Quitar archivo" (click)="remove.emit(i)">×</button>
+    </div>
+  </div>
+</section>

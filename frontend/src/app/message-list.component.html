@@ -1,0 +1,11 @@
+<div id="messages" class="messages" role="log" aria-live="polite" aria-label="Historial del chat">
+  <div *ngFor="let message of messages" class="bubble" [ngClass]="{ user: message.role === 'user', assistant: message.role === 'assistant' }">
+    <p>{{ message.content }}</p>
+    <div class="attachments" *ngIf="message.attachments?.length">
+      <div *ngFor="let file of message.attachments" class="attachment-chip">
+        <span>{{ formatAttachment(file) }}</span>
+        <span class="muted">{{ file.relativePath || file.filePath }}</span>
+      </div>
+    </div>
+  </div>
+</div>

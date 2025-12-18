@@ -1,0 +1,39 @@
+<div class="page">
+  <header>
+    <div>
+      <p class="eyebrow">Agente local</p>
+      <h1>{{ title }}</h1>
+      <p class="muted">Habla con el modelo en tu máquina. Mantén la pestaña abierta para conservar el contexto.</p>
+    </div>
+    <div class="header-actions">
+      <button type="button" id="toolbar-toggle" class="ghost-btn" (click)="toggleToolbar()" [attr.aria-expanded]="!toolbarCollapsed()">
+        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="chevron" [style.transform]="toolbarCollapsed() ? 'rotate(180deg)' : 'rotate(0deg)'"><polyline points="6 9 12 15 18 9"></polyline></svg>
+        <span class="btn-text">Configuración</span>
+      </button>
+      <div class="status" [class.connected]="isConnected()">
+        <span class="dot"></span>
+        <span id="status-text">{{ statusText() }}</span>
+      </div>
+    </div>
+  </header>
+
+  <app-chat-toolbar
+    [collapsed]="toolbarCollapsed()"
+    [models]="models()"
+    [modelValue]="model()"
+    [modelStatus]="modelStatus()"
+    [systemPrompt]="systemPrompt()"
+    [promptStatus]="promptStatus()"
+    (refreshModels)="loadModels()"
+    (modelChange)="onModelChange($event)"
+    (systemPromptChange)="systemPrompt.set($event)"
+    (saveSystemPrompt)="saveSystemPrompt()"
+  ></app-chat-toolbar>
+
+  <app-upload-card [attachments]="attachments()" (upload)="handleUpload($event)" (remove)="removeAttachment($event)"></app-upload-card>
+
+  <main class="panel" role="main">
+    <app-message-list [messages]="messages()"></app-message-list>
+    <app-chat-input [disabled]="isThinking()" (send)="submitMessage($event)"></app-chat-input>
+  </main>
+</div>
