@@ -4,6 +4,7 @@ import { ChatInputComponent } from './chat-input.component';
 import { ChatToolbarComponent } from './chat-toolbar.component';
 import { MessageListComponent } from './message-list.component';
 import { UploadCardComponent } from './upload-card.component';
+import { AgentApiService } from './agent-api.service';
 import { AttachmentInfo, ChatMessage, ModelInfo, formatBytes } from './types';
 
 @Component({
@@ -15,7 +16,6 @@ import { AttachmentInfo, ChatMessage, ModelInfo, formatBytes } from './types';
 })
 export class AppComponent implements OnInit {
   readonly title = 'Agente RDB';
-  readonly apiUrl = (globalThis as any).API_URL ?? 'http://localhost:3000';
 
   sessionId = signal<string | null>(localStorage.getItem('agent-session'));
   model = signal<string | null>(localStorage.getItem('agent-model'));
@@ -32,6 +32,8 @@ export class AppComponent implements OnInit {
   promptStatus = signal('Cargando system prompt...');
   statusText = signal('Conectando...');
 
+  constructor(private readonly api: AgentApiService) {}
+
   ngOnInit(): void {
     this.loadModels();
     this.loadSystemPrompt();
@@ -46,19 +48,13 @@ export class AppComponent implements OnInit {
   async loadModels(): Promise<void> {
     this.modelStatus.set('Cargando modelos...');
     try {
-      const response = await fetch(`${this.apiUrl}/api/models`);
-      if (!response.ok) throw new Error('No se pudieron cargar los modelos');
-      const payload = await response.json();
-      const models: ModelInfo[] = Array.isArray(payload.models)
-        ? payload.models.map((m: any) => ({ id: m.id ?? m, size: m.size, family: m.family }))
-        : [];
-      this.models.set(models);
-      const ids = models.map((m) => m.id);
-      const defaultModel = typeof payload.defaultModel === 'string' ? payload.defaultModel : null;
-      this.defaultModel.set(defaultModel);
+      const payload = await this.api.fetchModels();
+      this.models.set(payload.models);
+      const ids = payload.models.map((m) => m.id);
+      this.defaultModel.set(payload.defaultModel);
 
       const candidate = this.model() && ids.includes(this.model()!) ? this.model() : null;
-      const fallback = defaultModel && ids.includes(defaultModel) ? defaultModel : ids[0] ?? null;
+      const fallback = payload.defaultModel && ids.includes(payload.defaultModel) ? payload.defaultModel : ids[0] ?? null;
       const pick = candidate || fallback;
       if (pick) {
         this.setModel(pick, false);
@@ -77,10 +73,8 @@ export class AppComponent implements OnInit {
   async loadSystemPrompt(): Promise<void> {
     this.promptStatus.set('Cargando system prompt...');
     try {
-      const response = await fetch(`${this.apiUrl}/api/system-prompt`);
-      if (!response.ok) throw new Error('No se pudo cargar el system prompt');
-      const data = await response.json();
-      this.systemPrompt.set(data.systemPrompt ?? '');
+      const prompt = await this.api.fetchSystemPrompt();
+      this.systemPrompt.set(prompt ?? '');
       this.promptStatus.set('System prompt listo');
     } catch (error) {
       this.promptStatus.set(error instanceof Error ? error.message : 'No se pudo cargar el system prompt');
@@ -92,14 +86,8 @@ export class AppComponent implements OnInit {
     if (!value) return;
     this.promptStatus.set('Guardando...');
     try {
-      const response = await fetch(`${this.apiUrl}/api/system-prompt`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ systemPrompt: value })
-      });
-      if (!response.ok) throw new Error('No se pudo guardar el system prompt');
-      const data = await response.json();
-      this.systemPrompt.set(data.systemPrompt ?? value);
+      const savedPrompt = await this.api.saveSystemPrompt(value);
+      this.systemPrompt.set(savedPrompt ?? value);
       this.promptStatus.set('System prompt guardado');
     } catch (error) {
       this.promptStatus.set(error instanceof Error ? error.message : 'No se pudo guardar el system prompt');
@@ -165,22 +153,12 @@ export class AppComponent implements OnInit {
       sessionId: this.sessionId() ?? undefined,
       model: this.model() ?? undefined
     };
-    const response = await fetch(`${this.apiUrl}/api/chat`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
-    });
-    if (!response.ok) {
-      const err = await response.json().catch(() => ({}));
-      throw new Error(err.error || 'No se pudo enviar el mensaje');
+    const response = await this.api.sendMessage(payload);
+    if (response.sessionId) {
+      this.sessionId.set(response.sessionId);
+      localStorage.setItem('agent-session', response.sessionId);
     }
-    const data = await response.json();
-    const sid = typeof data.sessionId === 'string' ? data.sessionId : null;
-    if (sid) {
-      this.sessionId.set(sid);
-      localStorage.setItem('agent-session', sid);
-    }
-    return data.reply ?? null;
+    return response.reply ?? null;
   }
 
   appendMessage(message: ChatMessage): void {
@@ -207,22 +185,7 @@ export class AppComponent implements OnInit {
       this.appendMessage({ role: 'assistant', content: 'Tipo de archivo no permitido.' });
       return;
     }
-    const base64 = await this.fileToBase64(file);
-    const response = await fetch(`${this.apiUrl}/api/upload`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        name: file.name,
-        type: file.type,
-        size: file.size,
-        content: base64
-      })
-    });
-    if (!response.ok) {
-      const err = await response.json().catch(() => ({}));
-      throw new Error(err.error || 'No se pudo subir el archivo');
-    }
-    const attachment = await response.json();
+    const attachment = await this.api.uploadAttachment(file);
     this.attachments.set([...this.attachments(), attachment]);
   }
 
@@ -244,26 +207,5 @@ export class AppComponent implements OnInit {
       })
       .join('\n');
     return `${text}\n\nArchivos disponibles para el asistente (usa read_file o convert_file_to_base64 si los necesitas):\n${files}`;
-  }
-
-  private fileToBase64(file: File): Promise<string> {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => {
-        const buffer = reader.result;
-        if (!(buffer instanceof ArrayBuffer)) {
-          reject(new Error('No se pudo leer el archivo'));
-          return;
-        }
-        const bytes = new Uint8Array(buffer);
-        let binary = '';
-        bytes.forEach((b) => {
-          binary += String.fromCharCode(b);
-        });
-        resolve(btoa(binary));
-      };
-      reader.onerror = () => reject(new Error('No se pudo leer el archivo'));
-      reader.readAsArrayBuffer(file);
-    });
   }
 }
