@@ -41,14 +41,25 @@ export class ChatAgent {
    * Envía un mensaje del usuario, devuelve la respuesta del asistente
    * y gestiona llamadas a herramientas si el modelo las solicita.
    */
-  async sendMessage(prompt: string): Promise<string | null> {
-    const trimmed = prompt.trim();
-    if (!trimmed) return null;
+  async sendMessage(
+    prompt: string | OpenAI.Chat.Completions.ChatCompletionContentPart[]
+  ): Promise<string | null> {
+    const isArray = Array.isArray(prompt);
+    const content = isArray ? prompt : prompt.trim();
+    if (isArray && !prompt.length) return null;
+    if (!isArray && !content) return null;
 
-    this.conversation.push({ role: "user", content: trimmed });
+    this.conversation.push({ role: "user", content });
 
-    // Try with tools if we haven't determined support yet or if we know it's supported
-    const shouldTryTools = this.toolsSupported !== false;
+    // Si hay imagenes adjuntas, no usamos tools para forzar vision
+    const hasImages =
+      isArray &&
+      (content as OpenAI.Chat.Completions.ChatCompletionContentPart[]).some(
+        (p) => p.type === "image_url"
+      );
+
+    // Try with tools only when allowed
+    const shouldTryTools = !hasImages && this.toolsSupported !== false;
     const firstMessage = await this.requestMessage(shouldTryTools);
     if (!firstMessage) return null;
 

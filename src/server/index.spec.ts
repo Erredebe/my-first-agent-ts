@@ -62,19 +62,13 @@ describe("server routes", () => {
     expect(after.body.systemPrompt).toBe("nuevo prompt");
   });
 
-  it("acepta subida de archivos base64 y devuelve ruta de descarga", async () => {
-    const tmpFile = path.join(os.tmpdir(), "upload-test.txt");
+  it("acepta subida de archivos binarios y devuelve ruta de descarga", async () => {
     const content = "hola upload";
-    await fs.writeFile(tmpFile, content, "utf8");
+    const buffer = Buffer.from(content, "utf8");
 
-    const encoded = Buffer.from(content, "utf8").toString("base64");
-
-    const res = await request(app).post("/api/upload").send({
-      name: "upload-test.txt",
-      type: "text/plain",
-      size: content.length,
-      content: encoded
-    });
+    const res = await request(app)
+      .post("/api/upload")
+      .attach("file", buffer, { filename: "upload-test.txt", contentType: "text/plain" });
 
     expect(res.status).toBe(200);
     expect(res.body.downloadUrl).toContain("/api/download/");

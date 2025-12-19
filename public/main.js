@@ -353,17 +353,15 @@ function setUploadStatus(text, isError = false) {
 }
 
 async function uploadFileToServer(file) {
-  const base64 = await fileToBase64(file);
+  const formData = new FormData();
+  formData.append("file", file);
+  formData.append("name", file.name);
+  formData.append("type", file.type);
+  formData.append("size", String(file.size));
 
   const response = await fetch(`${window.API_URL}/api/upload`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      name: file.name,
-      type: file.type,
-      size: file.size,
-      content: base64,
-    }),
+    body: formData,
   });
 
   if (!response.ok) {
@@ -372,27 +370,6 @@ async function uploadFileToServer(file) {
   }
 
   return response.json();
-}
-
-function fileToBase64(file) {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => {
-      const buffer = reader.result;
-      if (!(buffer instanceof ArrayBuffer)) {
-        reject(new Error("No se pudo leer el archivo"));
-        return;
-      }
-      const bytes = new Uint8Array(buffer);
-      let binary = "";
-      bytes.forEach((b) => {
-        binary += String.fromCharCode(b);
-      });
-      resolve(btoa(binary));
-    };
-    reader.onerror = () => reject(new Error("No se pudo leer el archivo"));
-    reader.readAsArrayBuffer(file);
-  });
 }
 
 function addAttachment(attachment) {
@@ -478,7 +455,7 @@ async function handleSubmit(event) {
   setThinking(true);
 
   try {
-    const reply = await sendMessage(message);
+    const reply = await sendMessage(message, attachments);
     appendBubble(reply ?? "(sin respuesta)", "assistant");
     if (attachments.length) {
       state.attachments = [];
@@ -525,7 +502,7 @@ function submitForm() {
   }
 }
 
-async function sendMessage(message) {
+async function sendMessage(message, attachments = []) {
   const response = await fetch(`${window.API_URL}/api/chat`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -533,6 +510,7 @@ async function sendMessage(message) {
       message,
       sessionId: state.sessionId,
       model: state.model,
+      attachments,
     }),
   });
 

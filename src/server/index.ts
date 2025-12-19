@@ -5,6 +5,8 @@ import { randomUUID } from "crypto";
 import { exec } from "child_process";
 import { fileURLToPath } from "url";
 import fs from "fs/promises";
+import multer from "multer";
+import type { OpenAI } from "openai";
 import { ChatAgent } from "../core/chatAgent.js";
 import { createDownloadToken, getDownloadPath } from "./downloads.js";
 import {
@@ -54,7 +56,20 @@ const ALLOWED_MIME_TYPES = new Set([
   "image/png",
   "image/jpeg",
   "image/gif",
+  "image/webp",
 ]);
+const IMAGE_MIME_TYPES = new Set(["image/png", "image/jpeg", "image/gif", "image/webp"]);
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: MAX_UPLOAD_BYTES },
+  fileFilter: (_req, file, cb) => {
+    if (!ALLOWED_MIME_TYPES.has(file.mimetype)) {
+      cb(new Error(`Tipo de archivo no permitido: ${file.mimetype}`));
+    } else {
+      cb(null, true);
+    }
+  },
+});
 
 // Cada pestaña del navegador conserva su sesión de conversación.
 const agents = new Map<
@@ -213,95 +228,196 @@ app.post("/api/system-prompt", (req: Request, res: Response) => {
   res.json({ systemPrompt: currentSystemPrompt });
 });
 
-app.post("/api/upload", async (req: Request, res: Response) => {
-  const { name, type, size, content } = req.body as {
-    name?: string;
-    type?: string;
-    size?: number;
-    content?: string;
-  };
+app.post("/api/upload", (req: Request, res: Response) => {
+  upload.single("file")(req, res, async (err: unknown) => {
+    if (err) {
+      if (err instanceof multer.MulterError) {
+        const message =
+          err.code === "LIMIT_FILE_SIZE"
+            ? `El archivo es demasiado grande (limite ${MAX_UPLOAD_BYTES} bytes)`
+            : err.message;
+        return res.status(400).json({ error: message });
+      }
+      const message = (err as Error).message || "No se pudo procesar el archivo";
+      return res.status(400).json({ error: message });
+    }
 
-  try {
-    await uploadsReady;
-  } catch (error) {
-    Logger.error("No se pudo crear el directorio de uploads", error, "Server");
-    return res.status(500).json({ error: "No se pudo preparar la carpeta de archivos" });
-  }
+    try {
+      await uploadsReady;
+    } catch (error) {
+      Logger.error("No se pudo crear el directorio de uploads", error, "Server");
+      return res.status(500).json({ error: "No se pudo preparar la carpeta de archivos" });
+    }
 
-  if (!name || !type || typeof content !== "string" || typeof size !== "number") {
-    return res.status(400).json({ error: "Faltan campos obligatorios: name, type, size o content" });
-  }
+    const file = req.file;
+    const originalName = file?.originalname;
+    const type = file?.mimetype;
+    const size = file?.size ?? 0;
+    const buffer = file?.buffer;
 
-  if (size <= 0 || size > MAX_UPLOAD_BYTES) {
-    return res
-      .status(400)
-      .json({ error: `El archivo es demasiado grande (límite ${MAX_UPLOAD_BYTES} bytes)` });
-  }
+    if (!file || !originalName || !type || !buffer) {
+      return res.status(400).json({ error: "Falta el archivo a subir" });
+    }
 
-  if (!ALLOWED_MIME_TYPES.has(type)) {
-    return res.status(400).json({ error: `Tipo de archivo no permitido: ${type}` });
-  }
+    if (size < 0 || size > MAX_UPLOAD_BYTES) {
+      return res
+        .status(400)
+        .json({ error: `El archivo es demasiado grande (limite ${MAX_UPLOAD_BYTES} bytes)` });
+    }
 
-  let buffer: Buffer;
-  try {
-    buffer = Buffer.from(content, "base64");
-  } catch (error) {
-    Logger.error("No se pudo decodificar el archivo en base64", error, "Server");
-    return res.status(400).json({ error: "Contenido inválido" });
-  }
+    if (!ALLOWED_MIME_TYPES.has(type)) {
+      return res.status(400).json({ error: `Tipo de archivo no permitido: ${type}` });
+    }
 
-  if (buffer.length > MAX_UPLOAD_BYTES) {
-    return res
-      .status(400)
-      .json({ error: `El archivo es demasiado grande (límite ${MAX_UPLOAD_BYTES} bytes)` });
-  }
+    const extension = path.extname(originalName) || "";
+    const safeBaseName = path.basename(originalName, extension).replace(/[^a-zA-Z0-9._-]/g, "_") || "archivo";
+    const storedName = `${Date.now()}-${randomUUID()}-${safeBaseName}${extension}`;
+    const storedPath = path.join(UPLOAD_DIR, storedName);
 
-  const extension = path.extname(name) || "";
-  const safeBaseName = path.basename(name, extension).replace(/[^a-zA-Z0-9._-]/g, "_") || "archivo";
-  const storedName = `${Date.now()}-${randomUUID()}-${safeBaseName}${extension}`;
-  const storedPath = path.join(UPLOAD_DIR, storedName);
-
-  try {
-    await fs.writeFile(storedPath, buffer);
-    const token = await createDownloadToken(storedPath);
-    return res.json({
-      ok: true,
-      filePath: storedPath,
-      relativePath: path.relative(process.cwd(), storedPath),
-      downloadUrl: `/api/download/${token}`,
-      mimeType: type,
-      originalName: name,
-      size: buffer.length,
-    });
-  } catch (error) {
-    Logger.error("No se pudo guardar el archivo subido", error, "Server");
-    return res.status(500).json({ error: "No se pudo guardar el archivo" });
-  }
+    try {
+      await fs.writeFile(storedPath, buffer);
+      const token = await createDownloadToken(storedPath);
+      return res.json({
+        ok: true,
+        filePath: storedPath,
+        relativePath: path.relative(process.cwd(), storedPath),
+        downloadUrl: `/api/download/${token}`,
+        mimeType: type,
+        originalName,
+        size: buffer.length,
+      });
+    } catch (error) {
+      Logger.error("No se pudo guardar el archivo subido", error, "Server");
+      return res.status(500).json({ error: "No se pudo guardar el archivo" });
+    }
+  });
 });
 
+type AttachmentPayload = {
+  downloadUrl?: string;
+  mimeType?: string;
+  originalName?: string;
+  size?: number;
+  relativePath?: string;
+  filePath?: string;
+};
+
 app.post("/api/chat", async (req: Request, res: Response) => {
-  const { message, sessionId, model } = req.body as {
+  const { message, sessionId, model, attachments } = req.body as {
     message?: string;
     sessionId?: string;
     model?: string;
+    attachments?: AttachmentPayload[];
   };
 
   if (!message || typeof message !== "string" || !message.trim()) {
-    return res.status(400).json({ error: "Falta 'message' o está vacío" });
+    return res.status(400).json({ error: "Falta 'message' o esta vacio" });
   }
 
   const sid =
     sessionId && typeof sessionId === "string" ? sessionId : randomUUID();
   const agent = getAgent(sid, model);
 
+  let content: string | OpenAI.Chat.Completions.ChatCompletionContentPart[];
   try {
-    const reply = await agent.sendMessage(message);
+    content = await buildUserContent(message, attachments, req);
+  } catch (err) {
+    Logger.error("No se pudieron preparar los adjuntos para el mensaje", err, "Server");
+    return res.status(500).json({ error: "No se pudieron procesar los adjuntos" });
+  }
+
+  try {
+    const reply = await agent.sendMessage(content);
+    const hasImages = Array.isArray(content) && content.some(p => (p as any).type === "image_url");
+    Logger.info(
+      `Chat request sent. attachments=${attachments?.length ?? 0} hasImages=${hasImages}`,
+      "Server"
+    );
     res.json({ reply, sessionId: sid });
   } catch (err) {
     Logger.error("Error in /api/chat", err, "Server");
     res.status(500).json({ error: (err as Error).message });
   }
 });
+
+async function buildUserContent(
+  message: string,
+  attachments: AttachmentPayload[] | undefined,
+  req: Request
+): Promise<string | OpenAI.Chat.Completions.ChatCompletionContentPart[]> {
+  const parts: OpenAI.Chat.Completions.ChatCompletionContentPart[] = [
+    { type: "text", text: message }
+  ];
+
+  const files = Array.isArray(attachments) ? attachments : [];
+  for (const file of files) {
+    const url = file.downloadUrl;
+    const hasPathRef = Boolean(file.filePath || file.relativePath);
+    if (!url && !hasPathRef) continue;
+
+    const mime = file.mimeType || guessMimeFromPath(file);
+    if (isImageMime(mime)) {
+      const dataUrl = await toInlineImageUrl({ ...file, mimeType: mime });
+      const finalUrl = dataUrl ?? (url ? toAbsoluteUrl(url, req) : null);
+      if (finalUrl) {
+        parts.push({ type: "image_url", image_url: { url: finalUrl, detail: "high" } });
+        Logger.info(
+          `Imagen adjunta para modelo: ${file.originalName ?? file.relativePath ?? url ?? "(sin nombre)"}`,
+          "Server"
+        );
+      }
+    }
+
+    if (!isImageMime(mime) && url) {
+      parts.push({
+        type: "text",
+        text: `Archivo disponible: ${url} (${mime ?? "tipo desconocido"})`
+      });
+    }
+  }
+
+  return parts.length === 1 ? message : parts;
+}
+
+function toAbsoluteUrl(url: string, req: Request): string {
+  if (/^https?:\/\//i.test(url)) return url;
+  const origin = `${req.protocol}://${req.get("host")}`;
+  return new URL(url, origin).toString();
+}
+
+function isImageMime(mime?: string): boolean {
+  return mime ? IMAGE_MIME_TYPES.has(mime) : false;
+}
+
+function guessMimeFromPath(file: AttachmentPayload): string | undefined {
+  const p = file.filePath || file.relativePath || file.originalName;
+  if (!p) return undefined;
+  const ext = path.extname(p).toLowerCase();
+  if (ext === ".png") return "image/png";
+  if (ext === ".jpg" || ext === ".jpeg" || ext === ".jpe") return "image/jpeg";
+  if (ext === ".gif") return "image/gif";
+  if (ext === ".webp") return "image/webp";
+  return undefined;
+}
+
+async function toInlineImageUrl(file: AttachmentPayload): Promise<string | null> {
+  try {
+    const mime = file.mimeType || guessMimeFromPath(file);
+    if (!mime || !isImageMime(mime)) return null;
+    const resolvedPath = file.filePath
+      ? file.filePath
+      : file.relativePath
+      ? path.resolve(process.cwd(), file.relativePath)
+      : null;
+    if (!resolvedPath) return null;
+    const data = await fs.readFile(resolvedPath);
+    const base64 = data.toString("base64");
+    return `data:${mime};base64,${base64}`;
+  } catch (error) {
+    Logger.error("No se pudo leer el archivo de imagen para inline", error, "Server");
+    return null;
+  }
+}
 
 app.get("/api/download/:token", async (req: Request, res: Response) => {
   const { token } = req.params;
