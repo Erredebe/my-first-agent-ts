@@ -7,7 +7,12 @@ export type BackendType = "lm-studio" | "ollama";
 
 const DEFAULT_MODEL = "openai/gpt-oss-20b";
 const DEFAULT_BASE_URL = "http://127.0.0.1:1234/v1";
-const DEFAULT_SYSTEM_PROMPT = "Eres un asistente útil y conciso.";
+const DEFAULT_SYSTEM_PROMPT = `Eres un asistente de IA avanzado capaz de ejecutar herramientas para ayudar al usuario. 
+Si necesitas realizar una acción (leer/escribir archivos, buscar en la web, etc.), utiliza las herramientas disponibles. 
+Si el modelo no soporta herramientas nativas, puedes solicitar una herramienta escribiendo:
+TOOL_CALL: name="nombre_herramienta" arguments={"arg1": "valor"}
+
+Responde siempre de forma clara y profesional.`;
 const DEFAULT_API_KEY = "not-needed";
 
 export interface Config {

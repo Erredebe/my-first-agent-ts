@@ -12,7 +12,7 @@ export const webTools: OpenAI.Chat.Completions.ChatCompletionTool[] = [
     type: "function",
     function: {
       name: "fetch_url",
-      description: "Obtiene el contenido de una URL (página web, API, etc.)",
+      description: "Obtiene el contenido de una URL. Útil para investigar documentación online, leer artículos o consultar APIs externas.",
       parameters: {
         type: "object",
         properties: {

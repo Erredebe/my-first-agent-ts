@@ -14,7 +14,7 @@ export const fileTools: OpenAI.Chat.Completions.ChatCompletionTool[] = [
     type: "function",
     function: {
       name: "read_file",
-      description: "Lee un archivo de texto en el disco y devuelve su contenido",
+      description: "Lee un archivo de texto en el disco y devuelve su contenido. Utilízalo para examinar el código o documentos antes de modificarlos.",
       parameters: {
         type: "object",
         properties: {
@@ -83,7 +83,7 @@ export const fileTools: OpenAI.Chat.Completions.ChatCompletionTool[] = [
     type: "function",
     function: {
       name: "prepare_download",
-      description: "Genera un enlace de descarga para un archivo existente y accesible por el navegador",
+      description: "Genera un enlace de descarga para un archivo existente. Útil cuando el usuario te pide un link para bajar un archivo que ya existe en el disco.",
       parameters: {
         type: "object",
         properties: {
@@ -100,7 +100,7 @@ export const fileTools: OpenAI.Chat.Completions.ChatCompletionTool[] = [
     type: "function",
     function: {
       name: "write_file",
-      description: "Escribe texto en un archivo (sobrescribe o añade)",
+      description: "Escribe o sobreescribe contenido de texto en un archivo. Úsalo para crear código nuevo o editar archivos existentes.",
       parameters: {
         type: "object",
         properties: {

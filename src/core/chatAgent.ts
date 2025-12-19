@@ -25,6 +25,9 @@ export class ChatAgent {
   // Track if this model supports tools
   private toolsSupported: boolean | null = null;
 
+  // Límite de iteraciones para evitar bucles infinitos
+  private readonly MAX_ITERATIONS = 5;
+
   constructor(config: Config) {
     this.config = config;
     this.client = new OpenAI({ apiKey: config.apiKey, baseURL: config.baseURL });
@@ -38,6 +41,24 @@ export class ChatAgent {
   }
 
   /**
+   * Inyecta la descripción de las herramientas en el system prompt para modelos sin soporte nativo.
+   */
+  private injectToolDefinitions(): void {
+    const definitions = allTools.map(t => {
+      return `- **${t.function.name}**: ${t.function.description}\n  Args: ${JSON.stringify(t.function.parameters)}`;
+    }).join("\n");
+    
+    const toolInstruction = `\n\nHerramientas disponibles:\n${definitions}\n\nPara llamar a una herramienta usa el formato:\nTOOL_CALL: name="nombre" arguments={"arg": "valor"}`;
+    
+    if (this.conversation[0].role === "system") {
+      // Evitar duplicados
+      if (!this.conversation[0].content.includes("Herramientas disponibles:")) {
+        this.conversation[0].content += toolInstruction;
+      }
+    }
+  }
+
+  /**
    * Envía un mensaje del usuario, devuelve la respuesta del asistente
    * y gestiona llamadas a herramientas si el modelo las solicita.
    */
@@ -45,11 +66,12 @@ export class ChatAgent {
     prompt: string | OpenAI.Chat.Completions.ChatCompletionContentPart[]
   ): Promise<string | null> {
     const isArray = Array.isArray(prompt);
-    const content = isArray ? prompt : prompt.trim();
+    const content = isArray ? prompt : (typeof prompt === "string" ? prompt.trim() : prompt);
     if (isArray && !prompt.length) return null;
     if (!isArray && !content) return null;
 
-    this.conversation.push({ role: "user", content });
+    // Fix type error by casting to any or using correct type
+    this.conversation.push({ role: "user", content: content as any });
 
     // Si hay imagenes adjuntas, no usamos tools para forzar vision
     const hasImages =
@@ -58,21 +80,59 @@ export class ChatAgent {
         (p) => p.type === "image_url"
       );
 
-    // Try with tools only when allowed
-    const shouldTryTools = !hasImages && this.toolsSupported !== false;
-    const firstMessage = await this.requestMessage(shouldTryTools);
-    if (!firstMessage) return null;
+    // Iterative logic to support multiple tool calls in sequence
+    let iteration = 0;
+    const allToolOutputs: string[] = [];
 
-    if (hasToolCalls(firstMessage)) {
-      return this.handleToolFlow(firstMessage);
+    while (iteration < this.MAX_ITERATIONS) {
+      iteration++;
+      
+      // Try with tools only when allowed and supported
+      const shouldTryTools = !hasImages && this.toolsSupported !== false;
+      
+      // Si sabemos que no soporta tools nativas, nos aseguramos de que tenga las instrucciones
+      if (!hasImages && this.toolsSupported === false) {
+        this.injectToolDefinitions();
+      }
+
+      const message = await this.requestMessage(shouldTryTools);
+      if (!message) return null;
+
+      // 1. Detect tool calls (native or manual)
+      const nativeToolCalls = message.tool_calls || [];
+      const manualToolCalls = this.parseManualToolCalls(message.content || "");
+      
+      if (nativeToolCalls.length === 0 && manualToolCalls.length === 0) {
+        // No more tools needed, return final content
+        if (message.content) {
+          const finalReply = appendToolFallback(message.content, allToolOutputs);
+          this.appendAssistant(finalReply);
+          return finalReply;
+        }
+        
+        if (allToolOutputs.length > 0) {
+          const fallback = allToolOutputs.join("\n\n");
+          this.appendAssistant(fallback);
+          return fallback;
+        }
+
+        return null;
+      }
+
+      // 2. Handle tool calls
+      let currentOutputs: string[] = [];
+      if (nativeToolCalls.length > 0) {
+        currentOutputs = await this.handleNativeToolFlow(message);
+      } else if (manualToolCalls.length > 0) {
+        currentOutputs = await this.handleManualToolFlow(message, manualToolCalls);
+      }
+      
+      allToolOutputs.push(...currentOutputs);
+      // Continue to next iteration to give the model the results
     }
 
-    if (firstMessage.content) {
-      this.appendAssistant(firstMessage.content);
-      return firstMessage.content;
-    }
-
-    return null;
+    Logger.warn(`Max iterations (${this.MAX_ITERATIONS}) reached for ${this.config.model}`, "ChatAgent");
+    return "Lo siento, he alcanzado el límite de pasos para completar esta tarea.";
   }
 
   /**
@@ -91,45 +151,36 @@ export class ChatAgent {
   }
 
   /**
-   * Gestiona la ruta "el modelo pidió herramientas".
-   * 1. Guarda la petición del asistente con sus tool_calls.
-   * 2. Ejecuta cada herramienta y añade sus resultados.
-   * 3. Vuelve a llamar al modelo sin herramientas para obtener la respuesta final.
+   * Gestiona la ruta "el modelo pidió herramientas nativas".
    */
-  private async handleToolFlow(
+  private async handleNativeToolFlow(
     toolCallingMessage: OpenAI.Chat.Completions.ChatCompletionMessage
-  ): Promise<string | null> {
+  ): Promise<string[]> {
     this.conversation.push({
       role: "assistant",
       content: toolCallingMessage.content ?? null,
       tool_calls: toolCallingMessage.tool_calls
     });
 
-    const toolOutputs = await this.runToolCalls(toolCallingMessage.tool_calls ?? []);
+    return this.runToolCalls(toolCallingMessage.tool_calls ?? []);
+  }
 
-    const finalMessage = await this.requestMessage(false);
-    const finalContent = finalMessage?.content;
-
-    if (finalContent) {
-      const reply = appendToolFallback(finalContent, toolOutputs);
-      this.appendAssistant(reply);
-      return reply;
-    }
-
-    if (toolOutputs.length) {
-      const fallback = toolOutputs.join("\\n\\n");
-      this.appendAssistant(fallback);
-      return fallback;
-    }
-
-    return null;
+  /**
+   * Gestiona la ruta "el modelo pidió herramientas manualmente".
+   */
+  private async handleManualToolFlow(
+    message: OpenAI.Chat.Completions.ChatCompletionMessage,
+    manualCalls: ToolCall[]
+  ): Promise<string[]> {
+    this.appendAssistant(message.content || "");
+    return this.runToolCalls(manualCalls);
   }
 
   /**
    * Ejecuta todas las tool_calls y agrega los mensajes "tool" al historial.
    */
   private async runToolCalls(
-    toolCalls: OpenAI.Chat.Completions.ChatCompletionMessageToolCall[]
+    toolCalls: ToolCall[]
   ): Promise<string[]> {
     const outputs: string[] = [];
 
@@ -149,7 +200,7 @@ export class ChatAgent {
           return {
             role: "tool",
             tool_call_id: call.id,
-            content: `Error executing tool: ${error instanceof Error ? error.message : String(error)}`
+            content: `Error: El comando falló con el mensaje: ${error instanceof Error ? error.message : String(error)}. Revisa los parámetros e inténtalo de nuevo.`
           } as OpenAI.Chat.Completions.ChatCompletionToolMessageParam;
         }
       })
@@ -181,9 +232,11 @@ export class ChatAgent {
 
       // If we successfully used tools, mark as supported
       if (allowTools && this.toolsSupported === null) {
-        this.toolsSupported = true;
-        modelToolSupport.set(this.config.model, true);
-        Logger.info(`Model ${this.config.model} supports tools`, "ChatAgent");
+        if (completion.choices[0]?.message.tool_calls) {
+          this.toolsSupported = true;
+          modelToolSupport.set(this.config.model, true);
+          Logger.info(`Model ${this.config.model} supports native tools`, "ChatAgent");
+        }
       }
 
       return completion.choices[0]?.message ?? null;
@@ -194,13 +247,13 @@ export class ChatAgent {
                          (errorMessage.includes("tool") && errorMessage.includes("not supported"));
       
       if (isToolError && allowTools) {
-        Logger.info(`Model ${this.config.model} does not support tools, retrying without tools`, "ChatAgent");
+        Logger.info(`Model ${this.config.model} does not support native tools, switching to manual mode`, "ChatAgent");
         
         // Mark model as not supporting tools
         this.toolsSupported = false;
         modelToolSupport.set(this.config.model, false);
         
-        // Retry without tools
+        // Retry without tools (manual mode will take over in sendMessage loop)
         return this.requestMessage(false);
       }
       
@@ -210,13 +263,49 @@ export class ChatAgent {
   }
 
   /**
+   * Parsea llamadas a herramientas manuales en el texto.
+   * Formato esperado: TOOL_CALL: name="nombre" arguments={...}
+   */
+  private parseManualToolCalls(content: string): ToolCall[] {
+    const toolCalls: ToolCall[] = [];
+    const regex = /TOOL_CALL:\s*name=["']([^"']+)["']\s*arguments=({.*})/g;
+    
+    let match;
+    while ((match = regex.exec(content)) !== null) {
+      const name = match[1];
+      const argsStr = match[2];
+      try {
+        // Generar un ID aleatorio para la llamada manual
+        const id = "call_" + Math.random().toString(36).substring(2, 11);
+        toolCalls.push({
+          id,
+          type: "function",
+          function: {
+            name,
+            arguments: argsStr
+          }
+        });
+      } catch (e) {
+        Logger.error(`Error parsing manual tool call arguments: ${argsStr}`, e, "ChatAgent");
+      }
+    }
+    
+    return toolCalls;
+  }
+
+  /**
    * Añade la respuesta del asistente al historial.
    */
   private appendAssistant(content: string): void {
-    this.conversation.push({ role: "assistant", content });
+    if (content) {
+      this.conversation.push({ role: "assistant", content });
+    }
   }
 }
 
+/**
+ * Verifica si un mensaje contiene tool_calls.
+ */
 function hasToolCalls(
   message: OpenAI.Chat.Completions.ChatCompletionMessage | null
 ): message is OpenAI.Chat.Completions.ChatCompletionMessage & {
