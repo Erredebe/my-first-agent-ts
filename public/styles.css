@@ -159,6 +159,20 @@ header {
   transform: rotate(-90deg);
 }
 
+#upload-toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+#upload-toggle .chevron {
+  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+#upload-toggle[aria-expanded="false"] .chevron {
+  transform: rotate(-90deg);
+}
+
 /* Status Indicator */
 .status {
   display: flex;
@@ -318,6 +332,9 @@ select:focus, .prompt-input:focus {
   display: flex;
   flex-direction: column;
   gap: 0.75rem;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  max-height: 800px;
+  overflow: hidden;
 }
 
 .upload-card__header {
@@ -331,12 +348,27 @@ select:focus, .prompt-input:focus {
   margin: 0.25rem 0;
 }
 
+.upload-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
 .upload-form {
   display: flex;
   flex-wrap: wrap;
   gap: 0.5rem;
   justify-content: flex-end;
   align-items: center;
+}
+
+.upload-body {
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  max-height: 600px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
 }
 
 .file-picker {
@@ -656,6 +688,11 @@ select:focus, .prompt-input:focus {
     align-items: stretch;
   }
 
+  .upload-actions {
+    justify-content: space-between;
+    flex-wrap: wrap;
+  }
+
   .upload-form {
     justify-content: flex-start;
   }
@@ -692,3 +729,28 @@ select:focus, .prompt-input:focus {
    font-size: 0.85rem;
   }
 }
+
+.upload-card[data-collapsed="true"] .upload-body {
+  max-height: 0;
+  padding-top: 0;
+  margin-top: 0;
+  opacity: 0;
+  border-width: 0;
+}
+
+.upload-card[data-collapsed="true"] {
+  max-height: 0;
+  padding: 0;
+  margin: 0;
+  border: 0;
+  opacity: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.upload-card[data-collapsed="true"] .upload-card__header {
+  display: none;
+}
+
+
+

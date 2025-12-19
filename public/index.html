@@ -1,9 +1,15 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="es">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0" />
-    <meta name="description" content="Interfaz de chat local para modelos de IA" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, maximum-scale=5.0"
+    />
+    <meta
+      name="description"
+      content="Interfaz de chat local para modelos de IA"
+    />
     <title>Agente GPT OSS</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -22,15 +28,56 @@
           <p class="eyebrow">Agente local</p>
           <h1>Agente RDB</h1>
           <p class="muted">
-            Habla con el modelo en tu máquina. Mantén la pestaña abierta para conservar el contexto.
+            Habla con el modelo en tu máquina. Mantén la pestaña abierta para
+            conservar el contexto.
           </p>
         </div>
         <div class="header-actions">
-          <button type="button" id="toolbar-toggle" class="ghost-btn" aria-label="Expandir/contraer configuración" aria-expanded="true">
-            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="chevron">
+          <button
+            type="button"
+            id="toolbar-toggle"
+            class="ghost-btn"
+            aria-label="Expandir/contraer configuración"
+            aria-expanded="true"
+          >
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              width="16"
+              height="16"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              class="chevron"
+            >
               <polyline points="6 9 12 15 18 9"></polyline>
             </svg>
             <span class="btn-text">Configuración</span>
+          </button>
+          <button
+            type="button"
+            id="upload-toggle"
+            class="ghost-btn"
+            aria-label="Mostrar u ocultar subida de archivos"
+            aria-expanded="true"
+          >
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              width="16"
+              height="16"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              class="chevron"
+            >
+              <polyline points="6 9 12 15 18 9"></polyline>
+            </svg>
+            <span class="btn-text">Archivos</span>
           </button>
           <div class="status">
             <span class="dot"></span>
@@ -39,26 +86,66 @@
         </div>
       </header>
 
-      <section class="toolbar" aria-label="Configuración del chat" data-collapsed="false">
+      <section
+        class="toolbar"
+        aria-label="Configuración del chat"
+        data-collapsed="false"
+      >
         <div class="toolbar-left">
           <div class="toolbar-head">
             <label for="model-select">Modelo</label>
-            <button type="button" id="refresh-models" class="ghost-btn" aria-label="Refrescar lista de modelos">
-              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 2v6h-6"></path><path d="M3 12a9 9 0 0 1 15-6.7L21 8"></path><path d="M3 22v-6h6"></path><path d="M21 12a9 9 0 0 1-15 6.7L3 16"></path></svg>
+            <button
+              type="button"
+              id="refresh-models"
+              class="ghost-btn"
+              aria-label="Refrescar lista de modelos"
+            >
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              >
+                <path d="M21 2v6h-6"></path>
+                <path d="M3 12a9 9 0 0 1 15-6.7L21 8"></path>
+                <path d="M3 22v-6h6"></path>
+                <path d="M21 12a9 9 0 0 1-15 6.7L3 16"></path>
+              </svg>
               <span class="btn-text">Refrescar</span>
             </button>
           </div>
           <div class="model-row">
             <div class="select-wrapper">
-              <select id="model-select" aria-label="Seleccionar modelo"></select>
+              <select
+                id="model-select"
+                aria-label="Seleccionar modelo"
+              ></select>
             </div>
-            <span id="model-status" class="helper muted" role="status" aria-live="polite">Cargando modelos...</span>
+            <span
+              id="model-status"
+              class="helper muted"
+              role="status"
+              aria-live="polite"
+              >Cargando modelos...</span
+            >
           </div>
         </div>
         <div class="toolbar-right">
           <div class="toolbar-head">
             <label for="system-prompt">System prompt</label>
-            <button type="button" id="save-system-prompt" class="ghost-btn" aria-label="Guardar system prompt">Guardar</button>
+            <button
+              type="button"
+              id="save-system-prompt"
+              class="ghost-btn"
+              aria-label="Guardar system prompt"
+            >
+              Guardar
+            </button>
           </div>
           <textarea
             id="system-prompt"
@@ -67,42 +154,98 @@
             placeholder="Define el comportamiento base del asistente"
             aria-describedby="prompt-status"
           ></textarea>
-          <span id="prompt-status" class="helper muted" role="status" aria-live="polite">Cargando system prompt...</span>
+          <span
+            id="prompt-status"
+            class="helper muted"
+            role="status"
+            aria-live="polite"
+            >Cargando system prompt...</span
+          >
         </div>
       </section>
 
-      <section class="upload-card" aria-label="Subir archivos para el asistente">
+      <section
+        class="upload-card"
+        aria-label="Subir archivos para el asistente"
+        data-collapsed="false"
+      >
         <div class="upload-card__header">
           <div>
             <p class="eyebrow">Archivos</p>
             <h3>Comparte documentos e imágenes con el modelo</h3>
             <p class="muted">
-              Los archivos se guardan de forma local en la carpeta <code>uploads/</code> y el modelo puede leerlos
-              usando las herramientas de fichero.
+              Los archivos se guardan de forma local en la carpeta
+              <code>uploads/</code> y el modelo puede leerlos usando las
+              herramientas de fichero.
             </p>
           </div>
-          <form id="upload-form" class="upload-form">
-            <label class="file-picker" aria-label="Seleccionar archivo para subir">
-              <input type="file" id="file-input" name="file" />
-              <span id="file-label">Selecciona un archivo</span>
-            </label>
-            <button type="submit" id="upload-btn" class="primary-btn">Subir</button>
-          </form>
+          <div class="upload-actions">
+            <form id="upload-form" class="upload-form">
+              <label
+                class="file-picker"
+                aria-label="Seleccionar archivo para subir"
+              >
+                <input type="file" id="file-input" name="file" />
+                <span id="file-label">Selecciona un archivo</span>
+              </label>
+              <button type="submit" id="upload-btn" class="primary-btn">
+                Subir
+              </button>
+            </form>
+          </div>
         </div>
-        <p id="upload-status" class="helper muted" role="status" aria-live="polite">
-          Formatos permitidos: txt, pdf, doc, docx, png, jpg, jpeg, gif. Límite 10MB.
-        </p>
-        <div id="attachment-list" class="attachment-list" aria-live="polite"></div>
+        <div class="upload-body">
+          <p
+            id="upload-status"
+            class="helper muted"
+            role="status"
+            aria-live="polite"
+          >
+            Formatos permitidos: txt, pdf, doc, docx, png, jpg, jpeg, gif.
+            Límite 10MB.
+          </p>
+          <div
+            id="attachment-list"
+            class="attachment-list"
+            aria-live="polite"
+          ></div>
+        </div>
       </section>
 
       <main class="panel" role="main">
-        <div id="messages" class="messages" role="log" aria-live="polite" aria-label="Historial del chat"></div>
+        <div
+          id="messages"
+          class="messages"
+          role="log"
+          aria-live="polite"
+          aria-label="Historial del chat"
+        ></div>
 
         <form id="chat-form" class="input-bar">
-          <label for="message-input" class="visually-hidden">Escribe tu mensaje</label>
-          <textarea id="message-input" rows="1" placeholder="Escribe tu mensaje..." aria-label="Mensaje a enviar"></textarea>
+          <label for="message-input" class="visually-hidden"
+            >Escribe tu mensaje</label
+          >
+          <textarea
+            id="message-input"
+            rows="1"
+            placeholder="Escribe tu mensaje..."
+            aria-label="Mensaje a enviar"
+          ></textarea>
           <button type="submit" id="send-btn" aria-label="Enviar mensaje">
-            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              width="20"
+              height="20"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <line x1="22" y1="2" x2="11" y2="13"></line>
+              <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+            </svg>
           </button>
         </form>
       </main>

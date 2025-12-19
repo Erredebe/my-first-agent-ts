@@ -19,6 +19,8 @@ const DOM = {
   fileLabel: document.getElementById("file-label"),
   uploadStatus: document.getElementById("upload-status"),
   attachmentList: document.getElementById("attachment-list"),
+  uploadCard: document.querySelector(".upload-card"),
+  uploadToggle: document.getElementById("upload-toggle"),
 };
 
 const state = {
@@ -30,6 +32,7 @@ const state = {
   systemPrompt: "",
   isConnected: false,
   toolbarCollapsed: localStorage.getItem("toolbar-collapsed") === "true",
+  uploadCollapsed: localStorage.getItem("upload-collapsed") === "true",
   attachments: [],
 };
 
@@ -51,11 +54,13 @@ DOM.modelSelect?.addEventListener("change", handleModelChange);
 DOM.refreshModelsBtn?.addEventListener("click", () => loadModels());
 DOM.saveSystemPromptBtn?.addEventListener("click", handleSystemPromptSave);
 DOM.toolbarToggle?.addEventListener("click", toggleToolbar);
+DOM.uploadToggle?.addEventListener("click", toggleUploadCard);
 DOM.uploadForm?.addEventListener("submit", handleUploadSubmit);
 DOM.fileInput?.addEventListener("change", handleFileChange);
 
 // Initialize toolbar state
 initializeToolbar();
+initializeUploadCard();
 // Initialize connection status as disconnected
 updateConnectionStatus(false);
 
@@ -730,4 +735,25 @@ function toggleToolbar() {
   // Save state
   state.toolbarCollapsed = newState;
   localStorage.setItem("toolbar-collapsed", String(newState));
+}
+
+function initializeUploadCard() {
+  if (!DOM.uploadCard || !DOM.uploadToggle) return;
+
+  if (state.uploadCollapsed) {
+    DOM.uploadCard.setAttribute("data-collapsed", "true");
+    DOM.uploadToggle.setAttribute("aria-expanded", "false");
+  }
+}
+
+function toggleUploadCard() {
+  if (!DOM.uploadCard || !DOM.uploadToggle) return;
+
+  const isCollapsed = DOM.uploadCard.getAttribute("data-collapsed") === "true";
+  const newState = !isCollapsed;
+
+  DOM.uploadCard.setAttribute("data-collapsed", String(newState));
+  DOM.uploadToggle.setAttribute("aria-expanded", String(!newState));
+  state.uploadCollapsed = newState;
+  localStorage.setItem("upload-collapsed", String(newState));
 }
