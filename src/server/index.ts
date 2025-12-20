@@ -376,6 +376,12 @@ async function buildUserContent(
     }
   }
 
+  // Si hay imágenes, limpiamos el texto inicial para quitar la sección "Archivos disponibles..." que invita a usar herramientas.
+  const hasImages = files.some((f) => isImageMime(f.mimeType || guessMimeFromPath(f)));
+  if (hasImages && parts.length && parts[0]?.type === "text") {
+    parts[0].text = stripAttachmentNotice(parts[0].text);
+  }
+
   return parts.length === 1 ? message : parts;
 }
 
@@ -417,6 +423,13 @@ async function toInlineImageUrl(file: AttachmentPayload): Promise<string | null>
     Logger.error("No se pudo leer el archivo de imagen para inline", error, "Server");
     return null;
   }
+}
+
+function stripAttachmentNotice(text: string): string {
+  const marker = "\n\nArchivos disponibles";
+  const idx = text.indexOf(marker);
+  if (idx === -1) return text;
+  return text.slice(0, idx).trim();
 }
 
 app.get("/api/download/:token", async (req: Request, res: Response) => {

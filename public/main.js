@@ -21,6 +21,7 @@ const DOM = {
   attachmentList: document.getElementById("attachment-list"),
   uploadCard: document.querySelector(".upload-card"),
   uploadToggle: document.getElementById("upload-toggle"),
+  inputMeta: document.getElementById("input-meta"),
 };
 
 const state = {
@@ -130,6 +131,7 @@ async function loadModels() {
     updateConnectionStatus(false);
   } finally {
     toggleModelControls(false);
+    updateInputMeta();
   }
 }
 
@@ -176,6 +178,7 @@ function setActiveModel(modelId, announceChange = false) {
   }
 
   setModelStatus(`Modelo activo: ${modelId}`);
+  updateInputMeta();
 
   if (announceChange) {
     state.sessionId = null;
@@ -393,6 +396,7 @@ function renderAttachments() {
 
   if (!state.attachments.length) {
     DOM.attachmentList.textContent = "No hay archivos listos. Sube uno para compartirlo.";
+    updateInputMeta();
     return;
   }
 
@@ -419,6 +423,8 @@ function renderAttachments() {
 
     DOM.attachmentList.appendChild(chip);
   });
+
+  updateInputMeta();
 }
 
 function buildMessageWithAttachments(text, attachments) {
@@ -443,6 +449,16 @@ function formatBytes(bytes) {
   const exponent = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1);
   const value = bytes / 1024 ** exponent;
   return `${value.toFixed(value >= 10 ? 0 : 1)} ${units[exponent]}`;
+}
+
+function updateInputMeta() {
+  if (!DOM.inputMeta) return;
+  const modelLabel = state.model ? `Modelo: ${state.model}` : "Modelo: sin seleccionar";
+  const files = state.attachments;
+  const filesLabel = files.length
+    ? `· Adjuntos: ${files.map((f) => f.originalName || f.name || f.relativePath || "archivo").join(", ")}`
+    : "";
+  DOM.inputMeta.textContent = `${modelLabel}${filesLabel ? ` ${filesLabel}` : ""}`;
 }
 
 async function handleSubmit(event) {

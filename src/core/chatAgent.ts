@@ -1,5 +1,5 @@
 import { OpenAI } from "openai";
-import { Config } from "../config/index.js";
+import { Config, getDetectedBackend, type BackendType } from "../config/index.js";
 import { fileTools, executeFileToolCall } from "../tools/fileTools.js";
 import { webTools, executeWebToolCall } from "../tools/webTools.js";
 import { MessageParam, ToolCall } from "./types.js";
@@ -18,6 +18,7 @@ const modelToolSupport = new Map<string, boolean>();
 export class ChatAgent {
   private readonly client: OpenAI;
   private readonly config: Config;
+  private readonly backend: BackendType | null;
 
   // Historial de conversación que se envía en cada petición.
   private conversation: MessageParam[];
@@ -32,6 +33,7 @@ export class ChatAgent {
     this.config = config;
     this.client = new OpenAI({ apiKey: config.apiKey, baseURL: config.baseURL });
     this.conversation = [{ role: "system", content: config.systemPrompt }];
+    this.backend = getDetectedBackend() ?? guessBackendFromBaseURL(config.baseURL);
     
     // Check cache for tool support
     const cached = modelToolSupport.get(config.model);
@@ -101,6 +103,14 @@ export class ChatAgent {
       // 1. Detect tool calls (native or manual)
       const nativeToolCalls = message.tool_calls || [];
       const manualToolCalls = this.parseManualToolCalls(message.content || "");
+      
+      // Si hay imágenes, ignoramos cualquier intento de usar herramientas y devolvemos directamente el contenido.
+      if (hasImages) {
+        if (message.content) {
+          this.appendAssistant(message.content);
+          return message.content;
+        }
+      }
       
       if (nativeToolCalls.length === 0 && manualToolCalls.length === 0) {
         // No more tools needed, return final content
@@ -223,12 +233,19 @@ export class ChatAgent {
     allowTools: boolean
   ): Promise<OpenAI.Chat.Completions.ChatCompletionMessage | null> {
     try {
-      const completion = await this.client.chat.completions.create({
+      const requestPayload: any = {
         model: this.config.model,
         messages: this.conversation,
         tools: allowTools ? allTools : undefined,
         tool_choice: allowTools ? "auto" : undefined
-      });
+      };
+
+      const extraBody = this.buildExtraBodyForImages();
+      if (extraBody) {
+        requestPayload.extra_body = extraBody;
+      }
+
+      const completion = await this.client.chat.completions.create(requestPayload);
 
       // If we successfully used tools, mark as supported
       if (allowTools && this.toolsSupported === null) {
@@ -294,6 +311,19 @@ export class ChatAgent {
   }
 
   /**
+   * Ollama espera las imágenes en extra_body.images; extraemos las inline (data URL).
+   */
+  private buildExtraBodyForImages(): Record<string, unknown> | undefined {
+    if (this.backend !== "ollama") return undefined;
+
+    const lastUserMessage = findLastUserMessage(this.conversation);
+    const images = extractBase64Images(lastUserMessage);
+    if (!images.length) return undefined;
+
+    return { images };
+  }
+
+  /**
    * Añade la respuesta del asistente al historial.
    */
   private appendAssistant(content: string): void {
@@ -324,4 +354,43 @@ function appendToolFallback(finalContent: string, toolOutputs: string[]): string
     /\/api\/download\//.test(finalContent) || /<a\s/i.test(finalContent);
   if (hasDownload) return finalContent;
   return `${finalContent}\n\n${toolOutputs.join("\n\n")}`;
+}
+
+function guessBackendFromBaseURL(baseURL: string): BackendType | null {
+  try {
+    const url = new URL(baseURL);
+    if (url.port === "11434") return "ollama";
+  } catch {
+    // ignore parse errors
+  }
+  return null;
+}
+
+function findLastUserMessage(conversation: MessageParam[]): MessageParam | undefined {
+  for (let i = conversation.length - 1; i >= 0; i--) {
+    if (conversation[i].role === "user") return conversation[i];
+  }
+  return undefined;
+}
+
+function extractBase64Images(message?: MessageParam): string[] {
+  if (!message) return [];
+  const content = (message as any).content;
+  if (!Array.isArray(content)) return [];
+
+  const images: string[] = [];
+  for (const part of content) {
+    if (!part || part.type !== "image_url") continue;
+    const rawUrl =
+      typeof part.image_url === "string" ? part.image_url : part.image_url?.url;
+    if (!rawUrl) continue;
+    const base64 = stripDataUrlPrefix(rawUrl);
+    if (base64) images.push(base64);
+  }
+  return images;
+}
+
+function stripDataUrlPrefix(url: string): string | null {
+  const match = url.match(/^data:[^;]+;base64,(.+)$/);
+  return match?.[1] ?? null;
 }

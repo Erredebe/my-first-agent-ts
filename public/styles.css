@@ -394,7 +394,7 @@ select:focus, .prompt-input:focus {
   border-top: 1px solid var(--border-color);
   display: flex;
   gap: 0.75rem;
-  align-items: center; /* Ensures icons, text and button align perfectly */
+  align-items: flex-start;
 }
 
 /* Input Bar Actions */
@@ -419,6 +419,26 @@ select:focus, .prompt-input:focus {
   overflow-y: hidden;
   line-height: 1.4;
   min-height: 48px;
+}
+
+.input-main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.input-meta {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  padding: 0 0.5rem 0.2rem;
+  min-height: 18px;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .input-bar textarea:focus {
