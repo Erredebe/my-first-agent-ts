@@ -22,6 +22,7 @@ const DOM = {
   uploadCard: document.querySelector(".upload-card"),
   uploadToggle: document.getElementById("upload-toggle"),
   inputMeta: document.getElementById("input-meta"),
+  modelLine: document.getElementById("model-line"),
 };
 
 const state = {
@@ -58,6 +59,8 @@ DOM.toolbarToggle?.addEventListener("click", toggleToolbar);
 DOM.uploadToggle?.addEventListener("click", toggleUploadCard);
 DOM.uploadForm?.addEventListener("submit", handleUploadSubmit);
 DOM.fileInput?.addEventListener("change", handleFileChange);
+DOM.inputMeta?.addEventListener("click", handleMetaClick);
+updateModelLine();
 
 // Initialize toolbar state
 initializeToolbar();
@@ -132,6 +135,7 @@ async function loadModels() {
   } finally {
     toggleModelControls(false);
     updateInputMeta();
+    updateModelLine();
   }
 }
 
@@ -179,6 +183,7 @@ function setActiveModel(modelId, announceChange = false) {
 
   setModelStatus(`Modelo activo: ${modelId}`);
   updateInputMeta();
+  updateModelLine();
 
   if (announceChange) {
     state.sessionId = null;
@@ -332,7 +337,8 @@ async function handleUploadSubmit(event) {
 
   try {
     const uploaded = await uploadFileToServer(file);
-    addAttachment(uploaded);
+    const previewUrl = URL.createObjectURL(file);
+    addAttachment({ ...uploaded, previewUrl, mimeType: file.type });
     setUploadStatus(`Archivo listo: ${uploaded.relativePath || uploaded.filePath}`);
     DOM.fileInput.value = "";
     handleFileChange();
@@ -383,6 +389,7 @@ async function uploadFileToServer(file) {
 function addAttachment(attachment) {
   state.attachments.push(attachment);
   renderAttachments();
+  updateModelLine();
 }
 
 function removeAttachment(index) {
@@ -397,6 +404,7 @@ function renderAttachments() {
   if (!state.attachments.length) {
     DOM.attachmentList.textContent = "No hay archivos listos. Sube uno para compartirlo.";
     updateInputMeta();
+    updateModelLine();
     return;
   }
 
@@ -425,6 +433,7 @@ function renderAttachments() {
   });
 
   updateInputMeta();
+  updateModelLine();
 }
 
 function buildMessageWithAttachments(text, attachments) {
@@ -453,12 +462,45 @@ function formatBytes(bytes) {
 
 function updateInputMeta() {
   if (!DOM.inputMeta) return;
-  const modelLabel = state.model ? `Modelo: ${state.model}` : "Modelo: sin seleccionar";
   const files = state.attachments;
-  const filesLabel = files.length
-    ? `· Adjuntos: ${files.map((f) => f.originalName || f.name || f.relativePath || "archivo").join(", ")}`
+
+  const fileChips = files
+    .map((f) => {
+      const label = f.originalName || f.name || f.relativePath || "archivo";
+      const thumb =
+        f.mimeType?.startsWith("image/") && f.previewUrl
+          ? `<img class="meta-thumb" src="${f.previewUrl}" alt="${label}" />`
+          : "";
+      const href = f.previewUrl || f.downloadUrl || null;
+      const content = `${thumb}${label}`;
+      return href
+        ? `<span class="meta-chip" data-index="${files.indexOf(f)}"><a href="${href}" target="_blank" rel="noopener noreferrer">${content}</a><button type="button" class="meta-remove" aria-label="Quitar ${label}">×</button></span>`
+        : `<span class="meta-chip" data-index="${files.indexOf(f)}">${content}<button type="button" class="meta-remove" aria-label="Quitar ${label}">×</button></span>`;
+    })
+    .join("");
+
+  const filesLine = files.length
+    ? `<div class="meta-line chips" aria-label="Archivos adjuntos">${fileChips}</div>`
     : "";
-  DOM.inputMeta.textContent = `${modelLabel}${filesLabel ? ` ${filesLabel}` : ""}`;
+
+  DOM.inputMeta.innerHTML = filesLine;
+}
+
+function handleMetaClick(event) {
+  const target = event.target;
+  if (!target.classList.contains("meta-remove")) return;
+  const chip = target.closest(".meta-chip");
+  const idx = chip?.dataset?.index;
+  if (idx === undefined) return;
+  const indexNum = Number(idx);
+  if (Number.isNaN(indexNum)) return;
+  removeAttachment(indexNum);
+}
+
+function updateModelLine() {
+  if (!DOM.modelLine) return;
+  const modelLabel = state.model ? `Modelo: ${state.model}` : "";
+  DOM.modelLine.textContent = modelLabel;
 }
 
 async function handleSubmit(event) {
