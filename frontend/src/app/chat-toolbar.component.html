@@ -1,0 +1,35 @@
+<section class="toolbar" aria-label="Configuración del chat" [attr.data-collapsed]="collapsed">
+  <div class="toolbar-left">
+    <div class="toolbar-head">
+      <label for="model-select">Modelo</label>
+      <button type="button" id="refresh-models" class="ghost-btn" (click)="refreshModels.emit()">Refrescar</button>
+    </div>
+    <div class="model-row">
+      <div class="select-wrapper">
+        <select id="model-select" [ngModel]="modelValue" (ngModelChange)="modelChange.emit($event)">
+          <option *ngIf="!models.length" value="">Sin modelos</option>
+          <option *ngFor="let model of models" [value]="model.id">
+            {{ model.id }}<ng-container *ngIf="model.family || model.size"> ({{ [model.family, model.size].filter(Boolean).join(', ') }})</ng-container>
+          </option>
+        </select>
+      </div>
+      <span id="model-status" class="helper muted" role="status" aria-live="polite">{{ modelStatus }}</span>
+    </div>
+  </div>
+  <div class="toolbar-right">
+    <div class="toolbar-head">
+      <label for="system-prompt">System prompt</label>
+      <button type="button" id="save-system-prompt" class="ghost-btn" (click)="saveSystemPrompt.emit()">Guardar</button>
+    </div>
+    <textarea
+      id="system-prompt"
+      class="prompt-input"
+      rows="3"
+      [ngModel]="systemPrompt"
+      (ngModelChange)="systemPromptChange.emit($event)"
+      placeholder="Define el comportamiento base del asistente"
+      aria-describedby="prompt-status"
+    ></textarea>
+    <span id="prompt-status" class="helper muted" role="status" aria-live="polite">{{ promptStatus }}</span>
+  </div>
+</section>

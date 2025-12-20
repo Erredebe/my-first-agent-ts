@@ -37,7 +37,13 @@ Estructura:
 
 ## Instalación
 ```bash
+# Dependencias del backend (CLI + API)
 npm install
+
+# Dependencias del frontend Angular
+cd frontend
+npm install
+cd ..
 ```
 
 ## Variables de entorno
@@ -52,8 +58,14 @@ npm install
 - `window.API_URL` (frontend): URL del backend. Definir en `public/config.js` antes de cargar `main.js`.
 
 ## Uso
+
+### Backend (CLI y API)
 ```bash
+# CLI interactiva en la terminal
 npm start
+
+# Servidor HTTP + API REST (puerto 3000 por defecto)
+npm run start:web
 ```
 
 - Escribe tu mensaje y pulsa Enter.
@@ -69,13 +81,15 @@ npm start
   - `prepare_file_download(file_path, content, mode=replace|append)` : escribe y genera enlace de descarga.
   - `prepare_download(file_path)` : genera enlace de descarga de un archivo existente.
 
-### Frontal web
+### Frontend Angular (UI en `frontend/`)
 ```bash
-npm run start:web
+cd frontend
+npm start
+# abre http://localhost:4200 por defecto
 ```
-- Abre `http://localhost:3000` y chatea desde el navegador (la sesión se conserva en `localStorage`).
-- El selector superior se llena con `/api/models` (proxy de `/v1/models` del backend configurado) y reinicia el contexto al cambiar de modelo.
-- El system prompt actual se muestra y se puede actualizar desde la barra superior; al guardarlo se reinicia la conversaci?n.
+- El frontend llama al backend en `http://localhost:3000` por defecto; para apuntar a otra URL define `window.API_URL` antes de cargar la app (por ejemplo, insertando `<script>window.API_URL='https://mi-backend.com'</script>` en `frontend/src/index.html` o en la página que sirva el build).
+- Ajusta `FRONTEND_URL=http://localhost:4200` al arrancar el backend si sirves el frontend con `ng serve` para habilitar CORS.
+- El selector superior usa `/api/models` para rellenar la lista; cambiar de modelo reinicia la conversación. El system prompt se lee y se guarda mediante `/api/system-prompt`.
 
 ## Scripts útiles
 - `npm start` : ejecuta el agente con `tsx` (sin build previo).
