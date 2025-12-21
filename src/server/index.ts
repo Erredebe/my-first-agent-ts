@@ -5,9 +5,8 @@ import { randomUUID } from "crypto";
 import { exec } from "child_process";
 import { fileURLToPath } from "url";
 import fs from "fs/promises";
-import multer from "multer";
 import type { OpenAI } from "openai";
-import { ChatAgent } from "../core/chatAgent.js";
+import { OrchestratorAgent } from "../agents/orchestratorAgent.js";
 import { createDownloadToken, getDownloadPath } from "./downloads.js";
 import {
   getConfig,
@@ -59,26 +58,19 @@ const ALLOWED_MIME_TYPES = new Set([
   "image/webp",
 ]);
 const IMAGE_MIME_TYPES = new Set(["image/png", "image/jpeg", "image/gif", "image/webp"]);
-const upload = multer({
-  storage: multer.memoryStorage(),
-  limits: { fileSize: MAX_UPLOAD_BYTES },
-  fileFilter: (_req, file, cb) => {
-    if (!ALLOWED_MIME_TYPES.has(file.mimetype)) {
-      cb(new Error(`Tipo de archivo no permitido: ${file.mimetype}`));
-    } else {
-      cb(null, true);
-    }
-  },
+const uploadSingle = createUploadMiddleware({
+  maxBytes: MAX_UPLOAD_BYTES,
+  allowedMimeTypes: ALLOWED_MIME_TYPES,
 });
 
 // Cada pestaña del navegador conserva su sesión de conversación.
 const agents = new Map<
   string,
-  { agent: ChatAgent; lastActive: number; model: string }
+  { agent: OrchestratorAgent; lastActive: number; model: string }
 >();
 const SESSION_TIMEOUT_MS = 60 * 60 * 1000; // 1 hora
 
-function getAgent(sessionId: string, modelOverride?: string): ChatAgent {
+function getAgent(sessionId: string, modelOverride?: string): OrchestratorAgent {
   const baseConfig = getConfig();
   const model = modelOverride?.trim() || baseConfig.model;
   const systemPrompt = currentSystemPrompt;
@@ -90,7 +82,7 @@ function getAgent(sessionId: string, modelOverride?: string): ChatAgent {
   }
 
   const config = { ...baseConfig, model, systemPrompt };
-  const agent = new ChatAgent(config);
+  const agent = new OrchestratorAgent(config);
   agents.set(sessionId, { agent, lastActive: Date.now(), model });
   return agent;
 }
@@ -228,69 +220,63 @@ app.post("/api/system-prompt", (req: Request, res: Response) => {
   res.json({ systemPrompt: currentSystemPrompt });
 });
 
-app.post("/api/upload", (req: Request, res: Response) => {
-  upload.single("file")(req, res, async (err: unknown) => {
-    if (err) {
-      if (err instanceof multer.MulterError) {
-        const message =
-          err.code === "LIMIT_FILE_SIZE"
-            ? `El archivo es demasiado grande (limite ${MAX_UPLOAD_BYTES} bytes)`
-            : err.message;
-        return res.status(400).json({ error: message });
-      }
-      const message = (err as Error).message || "No se pudo procesar el archivo";
-      return res.status(400).json({ error: message });
-    }
+app.post("/api/upload", async (req: Request, res: Response) => {
+  try {
+    await uploadsReady;
+  } catch (error) {
+    Logger.error("No se pudo crear el directorio de uploads", error, "Server");
+    return res.status(500).json({ error: "No se pudo preparar la carpeta de archivos" });
+  }
 
-    try {
-      await uploadsReady;
-    } catch (error) {
-      Logger.error("No se pudo crear el directorio de uploads", error, "Server");
-      return res.status(500).json({ error: "No se pudo preparar la carpeta de archivos" });
-    }
+  try {
+    await runUploadMiddleware(req, res, uploadSingle);
+  } catch (err) {
+    const message = (err as Error).message || "No se pudo procesar el archivo";
+    return res.status(400).json({ error: message });
+  }
 
-    const file = req.file;
-    const originalName = file?.originalname;
-    const type = file?.mimetype;
-    const size = file?.size ?? 0;
-    const buffer = file?.buffer;
+  const uploadReq = req as UploadRequest;
+  const file = uploadReq.file;
+  const originalName = file?.originalname;
+  const type = file?.mimetype;
+  const size = file?.size ?? 0;
+  const buffer = file?.buffer;
 
-    if (!file || !originalName || !type || !buffer) {
-      return res.status(400).json({ error: "Falta el archivo a subir" });
-    }
+  if (!file || !originalName || !type || !buffer) {
+    return res.status(400).json({ error: "Falta el archivo a subir" });
+  }
 
-    if (size < 0 || size > MAX_UPLOAD_BYTES) {
-      return res
-        .status(400)
-        .json({ error: `El archivo es demasiado grande (limite ${MAX_UPLOAD_BYTES} bytes)` });
-    }
+  if (size < 0 || size > MAX_UPLOAD_BYTES) {
+    return res
+      .status(400)
+      .json({ error: `El archivo es demasiado grande (limite ${MAX_UPLOAD_BYTES} bytes)` });
+  }
 
-    if (!ALLOWED_MIME_TYPES.has(type)) {
-      return res.status(400).json({ error: `Tipo de archivo no permitido: ${type}` });
-    }
+  if (!ALLOWED_MIME_TYPES.has(type)) {
+    return res.status(400).json({ error: `Tipo de archivo no permitido: ${type}` });
+  }
 
-    const extension = path.extname(originalName) || "";
-    const safeBaseName = path.basename(originalName, extension).replace(/[^a-zA-Z0-9._-]/g, "_") || "archivo";
-    const storedName = `${Date.now()}-${randomUUID()}-${safeBaseName}${extension}`;
-    const storedPath = path.join(UPLOAD_DIR, storedName);
+  const extension = path.extname(originalName) || "";
+  const safeBaseName = path.basename(originalName, extension).replace(/[^a-zA-Z0-9._-]/g, "_") || "archivo";
+  const storedName = `${Date.now()}-${randomUUID()}-${safeBaseName}${extension}`;
+  const storedPath = path.join(UPLOAD_DIR, storedName);
 
-    try {
-      await fs.writeFile(storedPath, buffer);
-      const token = await createDownloadToken(storedPath);
-      return res.json({
-        ok: true,
-        filePath: storedPath,
-        relativePath: path.relative(process.cwd(), storedPath),
-        downloadUrl: `/api/download/${token}`,
-        mimeType: type,
-        originalName,
-        size: buffer.length,
-      });
-    } catch (error) {
-      Logger.error("No se pudo guardar el archivo subido", error, "Server");
-      return res.status(500).json({ error: "No se pudo guardar el archivo" });
-    }
-  });
+  try {
+    await fs.writeFile(storedPath, buffer);
+    const token = await createDownloadToken(storedPath);
+    return res.json({
+      ok: true,
+      filePath: storedPath,
+      relativePath: path.relative(process.cwd(), storedPath),
+      downloadUrl: `/api/download/${token}`,
+      mimeType: type,
+      originalName,
+      size: buffer.length,
+    });
+  } catch (error) {
+    Logger.error("No se pudo guardar el archivo subido", error, "Server");
+    return res.status(500).json({ error: "No se pudo guardar el archivo" });
+  }
 });
 
 type AttachmentPayload = {
@@ -301,6 +287,24 @@ type AttachmentPayload = {
   relativePath?: string;
   filePath?: string;
 };
+
+type UploadFile = {
+  originalname?: string;
+  mimetype?: string;
+  size?: number;
+  buffer?: Buffer;
+};
+
+type UploadRequest = Request & {
+  file?: UploadFile;
+  body: Record<string, unknown>;
+};
+
+type UploadMiddleware = (
+  req: Request,
+  res: Response,
+  next: (err?: unknown) => void
+) => void;
 
 app.post("/api/chat", async (req: Request, res: Response) => {
   const { message, sessionId, model, attachments } = req.body as {
@@ -430,6 +434,141 @@ function stripAttachmentNotice(text: string): string {
   const idx = text.indexOf(marker);
   if (idx === -1) return text;
   return text.slice(0, idx).trim();
+}
+
+function runUploadMiddleware(
+  req: Request,
+  res: Response,
+  middleware: UploadMiddleware
+): Promise<void> {
+  return new Promise((resolve, reject) => {
+    middleware(req, res, (err?: unknown) => {
+      if (err) reject(err);
+      else resolve();
+    });
+  });
+}
+
+function createUploadMiddleware(options: {
+  maxBytes: number;
+  allowedMimeTypes: Set<string>;
+}): UploadMiddleware {
+  return (req, _res, next) => {
+    const contentType = req.headers["content-type"] || "";
+    const boundaryMatch = contentType.match(/boundary=([^;]+)/i);
+    if (!/multipart\/form-data/i.test(contentType) || !boundaryMatch) {
+      return next(new Error("Se requiere multipart/form-data para subir archivos"));
+    }
+
+    const boundary = boundaryMatch[1];
+    const chunks: Buffer[] = [];
+    let total = 0;
+    let ended = false;
+
+    const abort = (err: Error) => {
+      if (ended) return;
+      ended = true;
+      next(err);
+    };
+
+    req.on("data", (chunk: Buffer) => {
+      total += chunk.length;
+      if (total > options.maxBytes) {
+        abort(new Error(`El archivo es demasiado grande (limite ${options.maxBytes} bytes)`));
+        req.destroy();
+        return;
+      }
+      chunks.push(chunk);
+    });
+
+    req.on("end", () => {
+      if (ended) return;
+      ended = true;
+      try {
+        const { files, fields } = parseMultipartBody(Buffer.concat(chunks), boundary);
+        const file = files.find((f) => f.name === "file") ?? files[0];
+        if (!file) {
+          return next(new Error("Falta el archivo a subir"));
+        }
+        if (!options.allowedMimeTypes.has(file.mimetype)) {
+          return next(new Error(`Tipo de archivo no permitido: ${file.mimetype}`));
+        }
+        const uploadReq = req as UploadRequest;
+        const baseBody =
+          uploadReq.body && typeof uploadReq.body === "object" ? uploadReq.body : {};
+        uploadReq.file = {
+          originalname: file.filename ?? "archivo",
+          mimetype: file.mimetype,
+          size: file.data.length,
+          buffer: file.data,
+        };
+        uploadReq.body = { ...baseBody, ...fields };
+        next();
+      } catch (error) {
+        next(error);
+      }
+    });
+
+    req.on("error", (err) => abort(err as Error));
+  };
+}
+
+function parseMultipartBody(
+  body: Buffer,
+  boundary: string
+): {
+  files: { name: string; filename?: string; mimetype: string; data: Buffer }[];
+  fields: Record<string, string>;
+} {
+  const boundaryText = `--${boundary}`;
+  const rawParts = body
+    .toString("binary")
+    .split(boundaryText)
+    .map((p) => p.trim())
+    .filter((p) => p && p !== "--");
+
+  const files: { name: string; filename?: string; mimetype: string; data: Buffer }[] = [];
+  const fields: Record<string, string> = {};
+
+  for (const rawPart of rawParts) {
+    const [headerSection, ...rest] = rawPart.split("\r\n\r\n");
+    if (!headerSection || !rest.length) continue;
+
+    let contentSection = rest.join("\r\n\r\n");
+    if (contentSection.endsWith("--")) {
+      contentSection = contentSection.slice(0, -2);
+    }
+
+    const headers = headerSection.split("\r\n").filter(Boolean);
+    const disposition = headers.find((h) =>
+      h.toLowerCase().startsWith("content-disposition")
+    );
+    if (!disposition) continue;
+
+    const nameMatch = disposition.match(/name="([^"]+)"/i);
+    const filenameMatch = disposition.match(/filename="([^"]*)"/i);
+    const fieldName = nameMatch?.[1] ?? "file";
+    const contentTypeHeader = headers.find((h) =>
+      h.toLowerCase().startsWith("content-type")
+    );
+    const mimetype = contentTypeHeader
+      ? contentTypeHeader.split(":")[1].trim()
+      : "application/octet-stream";
+
+    const data = Buffer.from(contentSection.replace(/^\r\n/, "").replace(/\r\n$/, ""), "binary");
+    if (filenameMatch && filenameMatch[1]) {
+      files.push({
+        name: fieldName,
+        filename: filenameMatch[1],
+        mimetype,
+        data,
+      });
+    } else {
+      fields[fieldName] = data.toString("utf8");
+    }
+  }
+
+  return { files, fields };
 }
 
 app.get("/api/download/:token", async (req: Request, res: Response) => {

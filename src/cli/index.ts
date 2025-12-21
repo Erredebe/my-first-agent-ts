@@ -1,6 +1,6 @@
 import chalk from "chalk";
 import readline from "readline";
-import { ChatAgent } from "../core/chatAgent.js";
+import { OrchestratorAgent } from "../agents/orchestratorAgent.js";
 import {
   getConfig,
   getCurrentBaseURL,
@@ -14,7 +14,7 @@ import {
 } from "../core/llm.js";
 
 const config = getConfig();
-let agent = new ChatAgent(config);
+let orchestrator = new OrchestratorAgent(config);
 
 const rl = readline.createInterface({
   input: process.stdin,
@@ -50,7 +50,7 @@ async function handleCommand(
   }
 
   if (input === "/borrar") {
-    agent.resetContext();
+    orchestrator.resetContext();
     console.log(chalk.yellow("Contexto borrado."));
     return "handled";
   }
@@ -91,25 +91,7 @@ async function handleCommand(
         }
 
         setModel(targetModel);
-        // Re-create agent with new config to ensure clean state or just update if supported (ChatAgent gets config by reference but constructor reads it once)
-        // ChatAgent reads config in constructor. We might need to make sure it picks up the change or just create a new one.
-        // The implementation in server/index.ts creates a new agent or updates, here we have a single agent.
-        // Let's just create a new agent instance to be safe and simple.
-        // But wait, 'agent' is const in global scope. We should change it to let or update it differently.
-        // Inspecting file again: line 11: const agent = new ChatAgent(config);
-        // We can't re-assign 'agent' if it is const.
-        // We should just update the internal config of the agent if possible, or we need to change how agent is declared.
-        // Checking ChatAgent: it has setSystemPrompt but not setModel.
-        // However, config is passed by reference? 
-        // In ChatAgent constructor: this.config = config.
-        // if we update config module's CURRENT_MODEL via setModel, getConfigs() returns a new object?
-        // Server/index.ts: getConfig() returns { model: CURRENT_MODEL, ... } new object.
-        // So modifying the global config doesn't affect the agent's copy used in constructor.
-        // We need to allow updating the agent's model or re-create the agent.
-        // For CLI, re-creating the agent is easiest. 
-        // I need to change 'const agent' to 'let agent'.
         console.log(chalk.green(`Modelo cambiado a: ${targetModel}`));
-        // We will handle the agent update in the main loop or make agent a let.
         return "reload_agent"; 
       }
     }
@@ -123,7 +105,7 @@ async function handleCommand(
       console.log(chalk.italic(config.systemPrompt));
     } else {
       const newPrompt = parts.slice(1).join(" ");
-      agent.setSystemPrompt(newPrompt);
+      orchestrator.setSystemPrompt(newPrompt);
       console.log(chalk.green("System Prompt actualizado."));
     }
     return "handled";
@@ -161,9 +143,8 @@ async function main() {
       break;
     }
     if (commandResult === "reload_agent") {
-      // Re-initialize agent with new settings
       const newConfig = getConfig();
-      agent = new ChatAgent(newConfig);
+      orchestrator = new OrchestratorAgent(newConfig);
       rl.prompt();
       continue;
     }
@@ -174,7 +155,7 @@ async function main() {
 
     rl.pause();
     process.stdout.write(chalk.gray("Pensando..."));
-    const reply = await agent.sendMessage(input);
+    const reply = await orchestrator.sendMessage(input);
     process.stdout.write("\r\x1b[K");
     rl.resume();
     if (reply) {

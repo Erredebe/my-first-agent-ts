@@ -1,8 +1,9 @@
 # Agente IA CLI (TypeScript)
 
-CLI en TypeScript para chatear con un servidor compatible con la API de OpenAI (por ejemplo `lm-studio`, `ollama` o `llama.cpp` HTTP) usando por defecto el modelo `openai/gpt-oss-20b` en `http://127.0.0.1:1234/v1`.
+CLI en TypeScript para chatear con un servidor compatible con la API de OpenAI (por ejemplo `lm-studio`, `ollama` o `llama.cpp` HTTP) usando por defecto el modelo `openai/gpt-oss-20b` en `http://127.0.0.1:1234/v1`. Incluye un agente orquestador que decide dinámicamente qué agente especializado debe actuar (chat, ficheros o web), siguiendo el patrón multi-agente para dividir el trabajo en piezas sencillas.
 
 Estructura:
+- `src/agents/` : orquestador y agentes especializados (`orchestratorAgent.ts`, `fileAgent.ts`, `webAgent.ts`).
 - `src/config/` : configuración base (modelo, URL, prompts).
 - `src/core/` : lógica del agente y tipos (`chatAgent.ts`, `types.ts`).
 - `src/tools/` : herramientas locales (`fileTools.ts`).
@@ -12,10 +13,14 @@ Estructura:
 
 ## Funcionalidades principales
 
+- **Orquestación multi-agente**:
+  - El `OrchestratorAgent` enruta cada mensaje al agente adecuado: conversación general (`ChatAgent`), acciones directas sobre ficheros (`FileAgent`) o lecturas rápidas de URLs (`WebAgent`).【F:src/agents/orchestratorAgent.ts†L15-L123】
+  - Historial unificado y propagación de cambios de modelo o system prompt a todos los sub-agentes.
+
 - **CLI interactiva** (`npm start`):
   - Detecta el backend disponible (LM Studio u Ollama) y muestra el estado de conexión.
   - Comandos integrados: `/model` (lista modelos desde el backend detectado), `/model <idx|nombre>` (cambia de modelo y reinicia el agente), `/system` (muestra o actualiza el system prompt), `/borrar` (limpia el contexto) y `/salir` (cierra la sesión).【F:src/cli/index.ts†L15-L121】
-  - Maneja llamadas a herramientas del modelo (archivo y web), reintenta sin herramientas si el modelo no las soporta y conserva historial por sesión.【F:src/core/chatAgent.ts†L16-L188】
+  - Rutas rápidas: `/file ...` para leer/escribir/preparar descargas y `/web <url>` para recuperar contenido sin pasar por el modelo.【F:src/agents/fileAgent.ts†L65-L126】【F:src/agents/webAgent.ts†L3-L33】
 
 - **Servidor Express + API REST** (`npm run start:web`):
   - Endpoints clave: `/api/chat` (chat con sesiones por `sessionId`), `/api/models` (lista modelos detectando backend), `/api/model` y `/api/model/load` (actualiza modelo/baseURL y limpia sesiones), `/api/system-prompt` (lee/actualiza prompt) y `/api/download/:token` (descarga archivos generados por las herramientas).【F:src/server/index.ts†L35-L205】
@@ -63,6 +68,7 @@ npm start
   - `/system` : muestra o actualiza el system prompt.
   - `/borrar` : limpia el contexto manteniendo el system prompt.
   - `/salir` : cierra la sesión.
+  - Comandos directos del orquestador: `/file` (leer, escribir, preparar descargas) y `/web <url>` para consultas rápidas sin pasar por el modelo.【F:src/agents/fileAgent.ts†L65-L126】【F:src/agents/webAgent.ts†L3-L33】
 - Herramientas disponibles (el modelo decide llamarlas):
   - `read_file(file_path, max_bytes?)` : lee archivos (limita a 200 KB por defecto).
   - `write_file(file_path, content, mode=replace|append)` : sobrescribe o añade.
