@@ -54,8 +54,15 @@ export class ChatAgent {
     
     if (this.conversation[0].role === "system") {
       // Evitar duplicados
-      if (!this.conversation[0].content.includes("Herramientas disponibles:")) {
-        this.conversation[0].content += toolInstruction;
+      if (typeof this.conversation[0].content === "string") {
+        if (!this.conversation[0].content.includes("Herramientas disponibles:")) {
+          this.conversation[0].content += toolInstruction;
+        }
+      } else {
+        const contentStr = this.conversation[0].content?.toString() ?? "";
+        if (!contentStr.includes("Herramientas disponibles:")) {
+          this.conversation[0].content = `${contentStr}${toolInstruction}`;
+        }
       }
     }
   }
