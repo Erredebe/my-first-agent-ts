@@ -138,7 +138,7 @@ async function main() {
   if (!backend) {
     console.log(
       chalk.red(
-        "\n⚠️  No se detectó ningún backend de LLM (LM Studio u Ollama).\n" +
+        "\n⚠️  No se detectó ningún backend de LLM (LM Studio, Ollama o Groq).\n" +
           "Asegúrate de que está ejecutándose y accesible en " +
           getCurrentBaseURL()
       )

@@ -42,7 +42,9 @@ npm install
 
 ## Variables de entorno
 - `OPENAI_BASE_URL` (opcional): URL base del servidor. Por defecto `http://127.0.0.1:1234/v1`.
+- `GROQ_BASE_URL` (opcional): URL base de Groq (por ejemplo `https://api.groq.com`). Si se omite, usa `OPENAI_BASE_URL`.
 - `OPENAI_API_KEY` (opcional): clave si tu servidor la requiere. Se usa `"not-needed"` por defecto.
+- `GROQ_API_KEY` (opcional): clave de Groq; se usa como alternativa cuando no existe `OPENAI_API_KEY`.
 - `MODEL` (opcional): modelo a usar. Por defecto `openai/gpt-oss-20b`.
 - `SYSTEM_PROMPT` (opcional): prompt del sistema.
 

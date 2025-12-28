@@ -360,6 +360,7 @@ function guessBackendFromBaseURL(baseURL: string): BackendType | null {
   try {
     const url = new URL(baseURL);
     if (url.port === "11434") return "ollama";
+    if (url.hostname.endsWith("groq.com")) return "groq";
   } catch {
     // ignore parse errors
   }
