@@ -1,3 +1,5 @@
+import { config as dotenvConfig } from "dotenv";
+dotenvConfig({ path: "./.env" });
 import express, { Request, Response } from "express";
 import cors from "cors";
 import path from "path";
@@ -18,10 +20,7 @@ import {
   getDetectedBackend,
 } from "../config/index.js";
 import { Logger } from "../core/logger.js";
-import {
-  detectBackend,
-  fetchModelsForBackend,
-} from "../core/llm.js";
+import { detectBackend, fetchModelsForBackend } from "../core/llm.js";
 
 /**
  * Servidor Express que expone la API de chat y sirve el frontal web.
@@ -58,7 +57,12 @@ const ALLOWED_MIME_TYPES = new Set([
   "image/gif",
   "image/webp",
 ]);
-const IMAGE_MIME_TYPES = new Set(["image/png", "image/jpeg", "image/gif", "image/webp"]);
+const IMAGE_MIME_TYPES = new Set([
+  "image/png",
+  "image/jpeg",
+  "image/gif",
+  "image/webp",
+]);
 const upload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: MAX_UPLOAD_BYTES },
@@ -108,8 +112,6 @@ setInterval(() => {
 
 // ============ BACKEND DETECTION HELPERS ============
 
-
-
 app.use(express.static(publicDir));
 
 app.get("/api/models", async (_req: Request, res: Response) => {
@@ -122,10 +124,10 @@ app.get("/api/models", async (_req: Request, res: Response) => {
   }
 
   try {
-    const models = await fetchModelsForBackend(config.baseURL, backend);
+    const models = await fetchModelsForBackend(getCurrentBaseURL(), backend);
     res.json({
       models,
-      defaultModel: config.model,
+      defaultModel: getCurrentModel(),
       backend: backend || "unknown",
     });
   } catch (error) {
@@ -148,7 +150,7 @@ app.get("/api/config", (_req: Request, res: Response) => {
   }
 });
 
-app.post("/api/model", express.json(), (req: Request, res: Response) => {
+app.post("/api/model", express.json(), async (req: Request, res: Response) => {
   const { model, baseURL } = req.body as {
     model?: string;
     baseURL?: string;
@@ -161,7 +163,12 @@ app.post("/api/model", express.json(), (req: Request, res: Response) => {
   }
 
   if (model) setModel(model);
-  if (baseURL) setBaseURL(baseURL);
+  if (baseURL) {
+    setBaseURL(baseURL);
+    // Esperar a que se detecte el backend antes de responder
+    const newBackend = await detectBackend(baseURL);
+    Logger.info(`Nuevo backend detectado tras cambio de URL: ${newBackend || "none"}`, "Server");
+  }
 
   // Limpiar sesiones activas
   agents.clear();
@@ -191,7 +198,7 @@ app.post(
     // Poll until model is available
     while (Date.now() - startTime < maxWaitMs) {
       const available = await fetchModelsForBackend(baseURL, backend);
-      if (available.some(m => m.id === model)) {
+      if (available.some((m) => m.id === model)) {
         setModel(model);
         agents.clear();
         return res.json({ ok: true, loaded: true, model });
@@ -238,15 +245,22 @@ app.post("/api/upload", (req: Request, res: Response) => {
             : err.message;
         return res.status(400).json({ error: message });
       }
-      const message = (err as Error).message || "No se pudo procesar el archivo";
+      const message =
+        (err as Error).message || "No se pudo procesar el archivo";
       return res.status(400).json({ error: message });
     }
 
     try {
       await uploadsReady;
     } catch (error) {
-      Logger.error("No se pudo crear el directorio de uploads", error, "Server");
-      return res.status(500).json({ error: "No se pudo preparar la carpeta de archivos" });
+      Logger.error(
+        "No se pudo crear el directorio de uploads",
+        error,
+        "Server"
+      );
+      return res
+        .status(500)
+        .json({ error: "No se pudo preparar la carpeta de archivos" });
     }
 
     const file = req.file;
@@ -260,17 +274,21 @@ app.post("/api/upload", (req: Request, res: Response) => {
     }
 
     if (size < 0 || size > MAX_UPLOAD_BYTES) {
-      return res
-        .status(400)
-        .json({ error: `El archivo es demasiado grande (limite ${MAX_UPLOAD_BYTES} bytes)` });
+      return res.status(400).json({
+        error: `El archivo es demasiado grande (limite ${MAX_UPLOAD_BYTES} bytes)`,
+      });
     }
 
     if (!ALLOWED_MIME_TYPES.has(type)) {
-      return res.status(400).json({ error: `Tipo de archivo no permitido: ${type}` });
+      return res
+        .status(400)
+        .json({ error: `Tipo de archivo no permitido: ${type}` });
     }
 
     const extension = path.extname(originalName) || "";
-    const safeBaseName = path.basename(originalName, extension).replace(/[^a-zA-Z0-9._-]/g, "_") || "archivo";
+    const safeBaseName =
+      path.basename(originalName, extension).replace(/[^a-zA-Z0-9._-]/g, "_") ||
+      "archivo";
     const storedName = `${Date.now()}-${randomUUID()}-${safeBaseName}${extension}`;
     const storedPath = path.join(UPLOAD_DIR, storedName);
 
@@ -322,15 +340,25 @@ app.post("/api/chat", async (req: Request, res: Response) => {
   try {
     content = await buildUserContent(message, attachments, req);
   } catch (err) {
-    Logger.error("No se pudieron preparar los adjuntos para el mensaje", err, "Server");
-    return res.status(500).json({ error: "No se pudieron procesar los adjuntos" });
+    Logger.error(
+      "No se pudieron preparar los adjuntos para el mensaje",
+      err,
+      "Server"
+    );
+    return res
+      .status(500)
+      .json({ error: "No se pudieron procesar los adjuntos" });
   }
 
   try {
     const reply = await agent.sendMessage(content);
-    const hasImages = Array.isArray(content) && content.some(p => (p as any).type === "image_url");
+    const hasImages =
+      Array.isArray(content) &&
+      content.some((p) => (p as any).type === "image_url");
     Logger.info(
-      `Chat request sent. attachments=${attachments?.length ?? 0} hasImages=${hasImages}`,
+      `Chat request sent. attachments=${
+        attachments?.length ?? 0
+      } hasImages=${hasImages}`,
       "Server"
     );
     res.json({ reply, sessionId: sid });
@@ -346,7 +374,7 @@ async function buildUserContent(
   req: Request
 ): Promise<string | OpenAI.Chat.Completions.ChatCompletionContentPart[]> {
   const parts: OpenAI.Chat.Completions.ChatCompletionContentPart[] = [
-    { type: "text", text: message }
+    { type: "text", text: message },
   ];
 
   const files = Array.isArray(attachments) ? attachments : [];
@@ -360,9 +388,14 @@ async function buildUserContent(
       const dataUrl = await toInlineImageUrl({ ...file, mimeType: mime });
       const finalUrl = dataUrl ?? (url ? toAbsoluteUrl(url, req) : null);
       if (finalUrl) {
-        parts.push({ type: "image_url", image_url: { url: finalUrl, detail: "high" } });
+        parts.push({
+          type: "image_url",
+          image_url: { url: finalUrl, detail: "high" },
+        });
         Logger.info(
-          `Imagen adjunta para modelo: ${file.originalName ?? file.relativePath ?? url ?? "(sin nombre)"}`,
+          `Imagen adjunta para modelo: ${
+            file.originalName ?? file.relativePath ?? url ?? "(sin nombre)"
+          }`,
           "Server"
         );
       }
@@ -371,13 +404,15 @@ async function buildUserContent(
     if (!isImageMime(mime) && url) {
       parts.push({
         type: "text",
-        text: `Archivo disponible: ${url} (${mime ?? "tipo desconocido"})`
+        text: `Archivo disponible: ${url} (${mime ?? "tipo desconocido"})`,
       });
     }
   }
 
   // Si hay imágenes, limpiamos el texto inicial para quitar la sección "Archivos disponibles..." que invita a usar herramientas.
-  const hasImages = files.some((f) => isImageMime(f.mimeType || guessMimeFromPath(f)));
+  const hasImages = files.some((f) =>
+    isImageMime(f.mimeType || guessMimeFromPath(f))
+  );
   if (hasImages && parts.length && parts[0]?.type === "text") {
     parts[0].text = stripAttachmentNotice(parts[0].text);
   }
@@ -406,7 +441,9 @@ function guessMimeFromPath(file: AttachmentPayload): string | undefined {
   return undefined;
 }
 
-async function toInlineImageUrl(file: AttachmentPayload): Promise<string | null> {
+async function toInlineImageUrl(
+  file: AttachmentPayload
+): Promise<string | null> {
   try {
     const mime = file.mimeType || guessMimeFromPath(file);
     if (!mime || !isImageMime(mime)) return null;
@@ -420,7 +457,11 @@ async function toInlineImageUrl(file: AttachmentPayload): Promise<string | null>
     const base64 = data.toString("base64");
     return `data:${mime};base64,${base64}`;
   } catch (error) {
-    Logger.error("No se pudo leer el archivo de imagen para inline", error, "Server");
+    Logger.error(
+      "No se pudo leer el archivo de imagen para inline",
+      error,
+      "Server"
+    );
     return null;
   }
 }
@@ -453,6 +494,11 @@ app.get("/api/download/:token", async (req: Request, res: Response) => {
 
 const port = process.env.PORT ? Number(process.env.PORT) : 3000;
 if (process.env.NODE_ENV !== "test") {
+  // Detectar backend al iniciar
+  detectBackend(getCurrentBaseURL()).then(backend => {
+    if (backend) Logger.info(`Backend detectado al inicio: ${backend}`, "Server");
+  });
+
   const server = app.listen(port, () => {
     Logger.info(`Frontend ready at http://localhost:${port}`, "Server");
     openBrowser(`http://localhost:${port}`);

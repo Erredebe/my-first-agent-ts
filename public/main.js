@@ -7,6 +7,7 @@ const DOM = {
   statusIndicator: document.querySelector(".status"),
   modelSelect: document.getElementById("model-select"),
   refreshModelsBtn: document.getElementById("refresh-models"),
+  backendProvider: document.getElementById("backend-provider"),
   modelStatus: document.getElementById("model-status"),
   systemPromptInput: document.getElementById("system-prompt"),
   saveSystemPromptBtn: document.getElementById("save-system-prompt"),
@@ -53,6 +54,7 @@ DOM.form.addEventListener("submit", handleSubmit);
 DOM.input.addEventListener("keydown", handleInputKeydown);
 DOM.sendBtn.addEventListener("keydown", handleSendKeydown);
 DOM.modelSelect?.addEventListener("change", handleModelChange);
+DOM.backendProvider?.addEventListener("change", handleBackendChange);
 DOM.refreshModelsBtn?.addEventListener("click", () => loadModels());
 DOM.saveSystemPromptBtn?.addEventListener("click", handleSystemPromptSave);
 DOM.toolbarToggle?.addEventListener("click", toggleToolbar);
@@ -68,6 +70,7 @@ initializeUploadCard();
 // Initialize connection status as disconnected
 updateConnectionStatus(false);
 
+loadConfig().catch(() => {});
 loadModels().catch(() => {
   setModelStatus("No se pudieron cargar los modelos", true);
 });
@@ -76,6 +79,53 @@ loadSystemPrompt().catch(() => {
 });
 renderAttachments();
 handleFileChange();
+
+async function loadConfig() {
+  try {
+    const response = await fetch(`${window.API_URL}/api/config`);
+    if (response.ok) {
+      const config = await response.json();
+      if (DOM.backendProvider && config.backend) {
+        DOM.backendProvider.value = config.backend;
+        updateStatusText(config.backend);
+      }
+    }
+  } catch (e) {}
+}
+
+async function handleBackendChange() {
+  const provider = DOM.backendProvider.value;
+  let url = "";
+
+  if (provider === "groq") url = "https://api.groq.com/openai/v1";
+  else if (provider === "ollama") url = "http://localhost:11434/v1";
+  else if (provider === "lm-studio") url = "http://127.0.0.1:1234/v1";
+
+  if (!url) return;
+
+  setModelStatus(`Cambiando a ${provider}...`);
+  try {
+    const response = await fetch(`${window.API_URL}/api/model`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ baseURL: url }),
+    });
+
+    if (response.ok) {
+      updateStatusText(provider);
+      await loadModels();
+    }
+  } catch (e) {
+    setModelStatus("Error al cambiar de proveedor", true);
+  }
+}
+
+function updateStatusText(provider) {
+  if (DOM.statusText) {
+    DOM.statusText.textContent = `Conectado: ${provider.toUpperCase()}`;
+    updateConnectionStatus(true);
+  }
+}
 
 async function loadModels() {
   if (!DOM.modelSelect) return;
@@ -277,6 +327,8 @@ async function handleSystemPromptSave() {
       "System prompt actualizado. Se reinicia la conversación.",
       "assistant"
     );
+    // Cerrar panel tras éxito
+    setTimeout(() => toggleToolbar(), 500);
   } catch (error) {
     setPromptStatus(
       error instanceof Error ? error.message : "Error al guardar",
@@ -342,6 +394,8 @@ async function handleUploadSubmit(event) {
     setUploadStatus(`Archivo listo: ${uploaded.relativePath || uploaded.filePath}`);
     DOM.fileInput.value = "";
     handleFileChange();
+    // Cerrar panel tras éxito
+    setTimeout(() => toggleUploadCard(), 500);
   } catch (error) {
     setUploadStatus(error instanceof Error ? error.message : "No se pudo subir el archivo", true);
   } finally {
@@ -600,17 +654,26 @@ function appendBubble(text, role, attachments = []) {
     bubble.textContent = text;
 
     if (attachments?.length) {
-      const list = document.createElement("ul");
-      list.className = "helper";
+      const attachmentsContainer = document.createElement("div");
+      attachmentsContainer.className = "bubble-attachments";
 
       attachments.forEach((file) => {
-        const item = document.createElement("li");
-        const name = file.originalName || file.name || file.relativePath || "Archivo";
-        item.textContent = `${name} (${formatBytes(file.size ?? 0)}) - ${file.relativePath || file.filePath}`;
-        list.appendChild(item);
+        if (file.mimeType?.startsWith("image/") && file.previewUrl) {
+          const img = document.createElement("img");
+          img.src = file.previewUrl;
+          img.alt = file.originalName || "Imagen adjunta";
+          img.className = "bubble-img-preview";
+          attachmentsContainer.appendChild(img);
+        } else {
+          const item = document.createElement("div");
+          item.className = "helper";
+          const name = file.originalName || file.name || file.relativePath || "Archivo";
+          item.textContent = `📎 ${name} (${formatBytes(file.size ?? 0)})`;
+          attachmentsContainer.appendChild(item);
+        }
       });
 
-      bubble.appendChild(list);
+      bubble.appendChild(attachmentsContainer);
     }
   }
 
@@ -630,10 +693,13 @@ function setThinking(value) {
   DOM.form.setAttribute("aria-busy", String(state.isThinking));
   
   if (state.isThinking) {
-    DOM.statusText.textContent = "Pensando...";
+    if (DOM.statusIndicator) DOM.statusIndicator.classList.add("thinking");
+    DOM.statusText.textContent = "Analizando...";
     showThinkingBubble();
   } else {
-    DOM.statusText.textContent = state.isConnected ? "Listo" : "Desconectado";
+    if (DOM.statusIndicator) DOM.statusIndicator.classList.remove("thinking");
+    const provider = DOM.backendProvider?.value;
+    DOM.statusText.textContent = state.isConnected ? `CONECTADO: ${provider?.toUpperCase() || 'LISTO'}` : "DESCONECTADO";
     removeThinkingBubble();
   }
 }
@@ -767,7 +833,12 @@ function updateConnectionStatus(isConnected) {
   }
   
   if (DOM.statusText && !state.isThinking) {
-    DOM.statusText.textContent = isConnected ? "Listo" : "Desconectado";
+    if (isConnected) {
+      const provider = DOM.backendProvider?.value || "SISTEMA";
+      DOM.statusText.textContent = `CONECTADO: ${provider.toUpperCase()}`;
+    } else {
+      DOM.statusText.textContent = "DESCONECTADO";
+    }
   }
 }
 

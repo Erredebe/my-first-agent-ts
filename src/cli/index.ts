@@ -1,3 +1,6 @@
+import { config as dotenvConfig } from "dotenv";
+dotenvConfig({ path: "./.env" });
+
 import chalk from "chalk";
 import readline from "readline";
 import { ChatAgent } from "../core/chatAgent.js";
@@ -8,10 +11,7 @@ import {
   setModel,
   getDetectedBackend,
 } from "../config/index.js";
-import {
-  detectBackend,
-  fetchModelsForBackend,
-} from "../core/llm.js";
+import { detectBackend, fetchModelsForBackend } from "../core/llm.js";
 
 const config = getConfig();
 let agent = new ChatAgent(config);
@@ -100,17 +100,17 @@ async function handleCommand(
         // We can't re-assign 'agent' if it is const.
         // We should just update the internal config of the agent if possible, or we need to change how agent is declared.
         // Checking ChatAgent: it has setSystemPrompt but not setModel.
-        // However, config is passed by reference? 
+        // However, config is passed by reference?
         // In ChatAgent constructor: this.config = config.
         // if we update config module's CURRENT_MODEL via setModel, getConfigs() returns a new object?
         // Server/index.ts: getConfig() returns { model: CURRENT_MODEL, ... } new object.
         // So modifying the global config doesn't affect the agent's copy used in constructor.
         // We need to allow updating the agent's model or re-create the agent.
-        // For CLI, re-creating the agent is easiest. 
+        // For CLI, re-creating the agent is easiest.
         // I need to change 'const agent' to 'let agent'.
         console.log(chalk.green(`Modelo cambiado a: ${targetModel}`));
         // We will handle the agent update in the main loop or make agent a let.
-        return "reload_agent"; 
+        return "reload_agent";
       }
     }
     return "handled";

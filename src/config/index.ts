@@ -7,12 +7,16 @@ export type BackendType = "lm-studio" | "ollama" | "groq";
 
 const DEFAULT_MODEL = "openai/gpt-oss-20b";
 const DEFAULT_BASE_URL = "http://127.0.0.1:1234/v1";
+const DEFAULT_GROQ_MODEL = "llama3-8b-8192";
+const GROQ_BASE_URL = "https://api.groq.com/openai/v1";
+
 const DEFAULT_SYSTEM_PROMPT = `Eres un asistente de IA avanzado capaz de ejecutar herramientas para ayudar al usuario. 
 Si necesitas realizar una acción (leer/escribir archivos, buscar en la web, etc.), utiliza las herramientas disponibles. 
 Si el modelo no soporta herramientas nativas, puedes solicitar una herramienta escribiendo:
 TOOL_CALL: name="nombre_herramienta" arguments={"arg1": "valor"}
 
 Responde siempre de forma clara y profesional.`;
+
 const DEFAULT_API_KEY = "not-needed";
 
 export interface Config {
@@ -22,59 +26,74 @@ export interface Config {
   systemPrompt: string;
 }
 
-// Modelo a usar; acepta rutas tipo "proveedor/modelo".
-let CURRENT_MODEL = process.env.MODEL ?? DEFAULT_MODEL;
+// Variables internas para estado dinámico
+let _model: string | undefined;
+let _baseURL: string | undefined;
+let _manualApiKey: string | null = null;
+let _detectedBackend: BackendType | null = null;
 
-// URL base compatible con LM Studio, Ollama, Groq, etc.
-let CURRENT_BASE_URL =
-  process.env.OPENAI_BASE_URL ?? process.env.GROQ_BASE_URL ?? DEFAULT_BASE_URL;
-
-// Backend detectado automáticamente
-let DETECTED_BACKEND: BackendType | null = null;
-
-// En entornos locales suele bastar con una cadena de relleno.
-let CURRENT_API_KEY =
-  process.env.OPENAI_API_KEY ?? process.env.GROQ_API_KEY ?? DEFAULT_API_KEY;
-
-// Prompt de arranque que marca el tono de las respuestas.
-export const SYSTEM_PROMPT = process.env.SYSTEM_PROMPT ?? DEFAULT_SYSTEM_PROMPT;
-
-// Límite de lectura para herramientas de archivo (evita archivos enormes).
-export const DEFAULT_MAX_READ_BYTES = 200_000;
+/**
+ * Obtiene la API Key adecuada según la URL base y el entorno.
+ */
+function getApiKeyForUrl(url: string): string {
+  if (url.includes("groq.com")) {
+    return process.env.GROQ_API_KEY ?? process.env.OPENAI_API_KEY ?? DEFAULT_API_KEY;
+  }
+  return process.env.OPENAI_API_KEY ?? process.env.GROQ_API_KEY ?? DEFAULT_API_KEY;
+}
 
 export function getConfig(): Config {
+  const model = getCurrentModel();
+  const baseURL = getCurrentBaseURL();
+  const apiKey = _manualApiKey ?? getApiKeyForUrl(baseURL);
+  
+  if (baseURL.includes("groq.com") && apiKey === DEFAULT_API_KEY) {
+     console.warn("[Config] ADVERTENCIA: Usando Groq pero no se encontró GROQ_API_KEY ni OPENAI_API_KEY.");
+  }
+
   return {
-    model: CURRENT_MODEL,
-    baseURL: CURRENT_BASE_URL,
-    apiKey: CURRENT_API_KEY,
-    systemPrompt: SYSTEM_PROMPT,
+    model,
+    baseURL,
+    apiKey,
+    systemPrompt: process.env.SYSTEM_PROMPT ?? DEFAULT_SYSTEM_PROMPT,
   };
 }
 
-export function setModel(model: string) {
-  CURRENT_MODEL = model;
-}
-
-export function setBaseURL(url: string) {
-  CURRENT_BASE_URL = url;
-}
-
-export function setApiKey(key: string) {
-  CURRENT_API_KEY = key;
-}
-
-export function setBackendType(backend: BackendType) {
-  DETECTED_BACKEND = backend;
-}
-
 export function getCurrentModel(): string {
-  return CURRENT_MODEL;
+  if (_model === undefined) {
+    _model = process.env.MODEL ?? (process.env.GROQ_API_KEY ? DEFAULT_GROQ_MODEL : DEFAULT_MODEL);
+  }
+  return _model;
 }
 
 export function getCurrentBaseURL(): string {
-  return CURRENT_BASE_URL;
+  if (_baseURL === undefined) {
+    _baseURL = process.env.OPENAI_BASE_URL ?? 
+               process.env.GROQ_BASE_URL ?? 
+               (process.env.GROQ_API_KEY ? GROQ_BASE_URL : DEFAULT_BASE_URL);
+  }
+  return _baseURL;
+}
+
+export function setModel(model: string) {
+  _model = model;
+}
+
+export function setBaseURL(url: string) {
+  _baseURL = url;
+}
+
+export function setApiKey(key: string) {
+  _manualApiKey = key;
+}
+
+export function setBackendType(backend: BackendType) {
+  _detectedBackend = backend;
 }
 
 export function getDetectedBackend(): BackendType | null {
-  return DETECTED_BACKEND;
+  return _detectedBackend;
 }
+
+export const SYSTEM_PROMPT = process.env.SYSTEM_PROMPT ?? DEFAULT_SYSTEM_PROMPT;
+export const DEFAULT_MAX_READ_BYTES = 200_000;

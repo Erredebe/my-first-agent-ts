@@ -1,5 +1,8 @@
-
-import { setBackendType, setBaseURL, type BackendType } from "../config/index.js";
+import {
+  setBackendType,
+  setBaseURL,
+  type BackendType,
+} from "../config/index.js";
 
 /**
  * Model information interface
@@ -16,34 +19,48 @@ export interface ModelInfo {
 /**
  * Detect which backend is available (LM Studio, Ollama, or Groq)
  */
-export async function detectBackend(baseURL: string): Promise<BackendType | null> {
+export async function detectBackend(
+  baseURL: string
+): Promise<BackendType | null> {
   const normalized = baseURL.replace(/\/$/, "");
 
   // Detect Groq (OpenAI-compatible) based on host
   try {
     const url = new URL(normalized);
     if (url.hostname.endsWith("groq.com")) {
+      console.log(`[LLM] Groq detectado por hostname: ${url.hostname}`);
       setBackendType("groq");
+      // Groq typical endpoint is https://api.groq.com/openai/v1
       if (!normalized.includes("/openai/v1")) {
-        setBaseURL(`${normalized}/openai/v1`);
+        // If it was just api.groq.com or api.groq.com/v1, fix it
+        const base = normalized.split("/v1")[0].replace(/\/$/, "");
+        const corrected = `${base}/openai/v1`;
+        console.log(`[LLM] Corrigiendo URL de Groq: ${normalized} -> ${corrected}`);
+        setBaseURL(corrected);
       }
       return "groq";
     }
   } catch (e) {
-    // Ignore Groq detection errors
+    // URL constructor failed? Try to fix if it looks like groq
+    if (normalized.includes("groq.com")) {
+       const corrected = normalized.startsWith("http") ? normalized : `https://${normalized}`;
+       console.log(`[LLM] URL de Groq mal formada, intentando corregir: ${normalized} -> ${corrected}`);
+       return detectBackend(corrected);
+    }
   }
 
   // Try LM Studio first (OpenAI-compatible /v1/models)
   try {
-    const lmStudioUrl = normalized.includes("/v1")
-      ? normalized + "/models"
-      : normalized + "/v1/models";
+    const modelsBase = normalized.includes("/v1") ? normalized : `${normalized}/v1`;
+    const lmStudioUrl = `${modelsBase.replace(/\/$/, "")}/models`;
+    
     const resp = await fetch(lmStudioUrl, {
       signal: AbortSignal.timeout(2000),
     });
     if (resp.ok) {
       const body = await resp.json();
       if (body.data || body.models || Array.isArray(body)) {
+        console.log(`[LLM] LM Studio (u compatible OpenAI) detectado en ${normalized}`);
         setBackendType("lm-studio");
         // Ensure baseURL includes /v1 for LM Studio
         if (!normalized.includes("/v1")) {
@@ -53,13 +70,12 @@ export async function detectBackend(baseURL: string): Promise<BackendType | null
       }
     }
   } catch (e) {
-    // Ignore LM Studio detection errors
+    // ignore
   }
 
   // Try Ollama (/api/tags)
   try {
-    const url = new URL(normalized);
-    const host = url.hostname;
+    const host = normalized.startsWith("http") ? new URL(normalized).hostname : normalized;
     const ollamaUrl = `http://${host}:11434/api/tags`;
     const resp = await fetch(ollamaUrl, {
       signal: AbortSignal.timeout(2000),
@@ -67,6 +83,7 @@ export async function detectBackend(baseURL: string): Promise<BackendType | null
     if (resp.ok) {
       const body = await resp.json();
       if (body.models && Array.isArray(body.models)) {
+        console.log(`[LLM] Ollama detectado en ${host}`);
         setBackendType("ollama");
         // Set Ollama's OpenAI-compatible endpoint
         setBaseURL(`http://${host}:11434/v1`);
@@ -74,9 +91,10 @@ export async function detectBackend(baseURL: string): Promise<BackendType | null
       }
     }
   } catch (e) {
-    // Ignore Ollama detection errors
+    // ignore
   }
 
+  console.log(`[LLM] No se detectó ningún backend en ${normalized}`);
   return null;
 }
 
@@ -112,16 +130,31 @@ export async function fetchModelsForBackend(
       // ignore
     }
   } else {
-    // LM Studio (OpenAI-compatible)
+    // LM Studio or Groq (OpenAI-compatible)
     try {
-      const lmStudioUrl = normalized.includes("/v1")
-        ? normalized + "/models"
-        : normalized + "/v1/models";
-      const resp = await fetch(lmStudioUrl);
+      // Construction for Groq/OpenAI: /models endpoint
+      // If it's Groq and lacks /openai/v1, we should add it if we want to use the OpenAI compatible endpoint
+      let apiUrl = normalized;
+      if (backend === "groq" && !apiUrl.includes("/openai/v1")) {
+        apiUrl = apiUrl.replace(/\/$/, "") + "/openai/v1";
+      }
+
+      const modelsBase = apiUrl.includes("/v1") ? apiUrl : `${apiUrl}/v1`;
+      const modelsUrl = `${modelsBase.replace(/\/$/, "")}/models`;
+
+      const headers: Record<string, string> = {};
+      if (backend === "groq") {
+        // Use the same logic as getConfig to find the right key
+        const apiKey = process.env.GROQ_API_KEY || process.env.OPENAI_API_KEY;
+        if (apiKey) {
+          headers["Authorization"] = `Bearer ${apiKey}`;
+        }
+      }
+      const resp = await fetch(modelsUrl, { headers });
       if (resp.ok) {
         const body = await resp.json();
         let models: any[] = [];
-        
+
         if (Array.isArray(body)) {
           models = body;
         } else if (body.data && Array.isArray(body.data)) {
@@ -129,9 +162,9 @@ export async function fetchModelsForBackend(
         } else if (body.models && Array.isArray(body.models)) {
           models = body.models;
         }
-        
+
         return models.map((m: any) => {
-          const id = typeof m === "string" ? m : (m.id || m.name || m);
+          const id = typeof m === "string" ? m : m.id || m.name || m;
           return {
             id,
             name: id,
@@ -156,7 +189,7 @@ export function formatBytes(bytes: number): string {
   const k = 1024;
   const sizes = ["B", "KB", "MB", "GB", "TB"];
   const i = Math.floor(Math.log(bytes) / Math.log(k));
-  return Math.round(bytes / Math.pow(k, i) * 100) / 100 + " " + sizes[i];
+  return Math.round((bytes / Math.pow(k, i)) * 100) / 100 + " " + sizes[i];
 }
 
 /**
