@@ -14,10 +14,24 @@ export interface ModelInfo {
 }
 
 /**
- * Detect which backend is available (LM Studio or Ollama)
+ * Detect which backend is available (LM Studio, Ollama, or Groq)
  */
 export async function detectBackend(baseURL: string): Promise<BackendType | null> {
   const normalized = baseURL.replace(/\/$/, "");
+
+  // Detect Groq (OpenAI-compatible) based on host
+  try {
+    const url = new URL(normalized);
+    if (url.hostname.endsWith("groq.com")) {
+      setBackendType("groq");
+      if (!normalized.includes("/openai/v1")) {
+        setBaseURL(`${normalized}/openai/v1`);
+      }
+      return "groq";
+    }
+  } catch (e) {
+    // Ignore Groq detection errors
+  }
 
   // Try LM Studio first (OpenAI-compatible /v1/models)
   try {

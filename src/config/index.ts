@@ -3,7 +3,7 @@
  * Todos los valores pueden sobrescribirse con variables de entorno para
  * probar distintos backends y prompts sin tocar el código fuente.
  */
-export type BackendType = "lm-studio" | "ollama";
+export type BackendType = "lm-studio" | "ollama" | "groq";
 
 const DEFAULT_MODEL = "openai/gpt-oss-20b";
 const DEFAULT_BASE_URL = "http://127.0.0.1:1234/v1";
@@ -25,14 +25,16 @@ export interface Config {
 // Modelo a usar; acepta rutas tipo "proveedor/modelo".
 let CURRENT_MODEL = process.env.MODEL ?? DEFAULT_MODEL;
 
-// URL base compatible con LM Studio, Ollama, etc.
-let CURRENT_BASE_URL = process.env.OPENAI_BASE_URL ?? DEFAULT_BASE_URL;
+// URL base compatible con LM Studio, Ollama, Groq, etc.
+let CURRENT_BASE_URL =
+  process.env.OPENAI_BASE_URL ?? process.env.GROQ_BASE_URL ?? DEFAULT_BASE_URL;
 
 // Backend detectado automáticamente
 let DETECTED_BACKEND: BackendType | null = null;
 
 // En entornos locales suele bastar con una cadena de relleno.
-let CURRENT_API_KEY = process.env.OPENAI_API_KEY ?? DEFAULT_API_KEY;
+let CURRENT_API_KEY =
+  process.env.OPENAI_API_KEY ?? process.env.GROQ_API_KEY ?? DEFAULT_API_KEY;
 
 // Prompt de arranque que marca el tono de las respuestas.
 export const SYSTEM_PROMPT = process.env.SYSTEM_PROMPT ?? DEFAULT_SYSTEM_PROMPT;
